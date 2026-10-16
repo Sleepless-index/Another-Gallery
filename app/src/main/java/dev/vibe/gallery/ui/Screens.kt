@@ -122,6 +122,8 @@ fun PhotosScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit, o
                         count = selected.size,
                         onSelectAll = { vm.selectAll(items.map { it.id }) },
                         onCancel = { vm.clearSelection() },
+                        allSelected = items.isNotEmpty() && selected.size >= items.size,
+                        onDeselectAll = { vm.deselectAll() },
                     )
                 } else {
                     ScreenHeader(
@@ -130,7 +132,7 @@ fun PhotosScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit, o
                         trailing = {
                             GIconButton(GIcons.CheckCircle, "Select items", onClick = { vm.startSelect() })
                             Box {
-                                GIconButton(GIcons.More, "More options", onClick = { menu = true })
+                                GIconButton(GIcons.More, "More options", onClick = { menu = true }, flat = true)
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                     CompactMenuItem(
                                         text = {
@@ -221,6 +223,8 @@ fun CollectionScreen(
                         count = selected.size,
                         onSelectAll = { vm.selectAll(items.map { it.id }) },
                         onCancel = { vm.clearSelection() },
+                        allSelected = items.isNotEmpty() && selected.size >= items.size,
+                        onDeselectAll = { vm.deselectAll() },
                     )
                 } else {
                     ScreenHeader(
@@ -316,6 +320,8 @@ fun SearchScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit) {
                         count = selected.size,
                         onSelectAll = { vm.selectAll(results.map { it.id }) },
                         onCancel = { vm.clearSelection() },
+                        allSelected = results.isNotEmpty() && selected.size >= results.size,
+                        onDeselectAll = { vm.deselectAll() },
                     )
                 } else {
                     ScreenHeader(title = "Search", subtitle = "")

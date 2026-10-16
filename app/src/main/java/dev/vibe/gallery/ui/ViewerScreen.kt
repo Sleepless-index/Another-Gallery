@@ -175,7 +175,7 @@ fun ViewerScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                GIconButton(GIcons.Back, "Back", onClick = onBack, container = ChromeBg, tint = Color.White)
+                GIconButton(GIcons.Back, "Back", onClick = onBack, container = ChromeBg, tint = Color.White, flat = true)
                 Column(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -194,7 +194,7 @@ fun ViewerScreen(
                     )
                 }
                 Box {
-                    GIconButton(GIcons.More, "More options", onClick = { menu = true }, container = ChromeBg, tint = Color.White)
+                    GIconButton(GIcons.More, "More options", onClick = { menu = true }, container = ChromeBg, tint = Color.White, flat = true)
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         CompactMenuItem(
                             text = { Text("Details") },
