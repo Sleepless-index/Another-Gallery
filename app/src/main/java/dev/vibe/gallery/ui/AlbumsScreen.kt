@@ -173,7 +173,7 @@ fun AlbumsScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         val request = remember(album.cover.uri) {
-                            dev.vibe.gallery.data.thumbRequest(ctx, album.cover.uri, 420)
+                            dev.vibe.gallery.data.thumbRequest(ctx, album.cover.uri, 480, album.cover.isVideo)
                         }
                         AsyncImage(
                             model = request,

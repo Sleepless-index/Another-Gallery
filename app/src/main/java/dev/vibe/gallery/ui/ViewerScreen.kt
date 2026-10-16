@@ -269,7 +269,7 @@ private fun VideoPage(
             .padding(top = insetTop, bottom = insetBottom),
         contentAlignment = Alignment.Center,
     ) {
-        val request = remember(item.uri) { dev.vibe.gallery.data.thumbRequest(ctx, item.uri, 1280) }
+        val request = remember(item.uri) { dev.vibe.gallery.data.thumbRequest(ctx, item.uri, 1280, false) }
         // The frame hugs the video, so the duration badge sits on the video's own bottom-right corner.
         Box(
             modifier = Modifier
