@@ -53,7 +53,7 @@ import dev.vibe.gallery.data.MediaItem
 import dev.vibe.gallery.editor.EditorScreen
 import dev.vibe.gallery.ui.theme.GIcons
 
-private val TabRoutes = setOf("photos", "albums", "search", "settings")
+private val TabRoutes = setOf("photos", "albums", "search")
 
 @Composable
 fun GalleryRoot(vm: GalleryViewModel, hasPermission: Boolean, onRequestPermission: () -> Unit) {
@@ -89,16 +89,21 @@ fun GalleryRoot(vm: GalleryViewModel, hasPermission: Boolean, onRequestPermissio
             popEnterTransition = { fadeIn(tween(240)) },
             popExitTransition = { fadeOut(tween(160)) },
         ) {
-            composable("photos") { PhotosScreen(vm, onOpen = openViewer) }
+            composable("photos") { PhotosScreen(vm, onOpen = openViewer, onOpenSettings = { nav.navigate("settings") }) }
             composable("albums") {
                 AlbumsScreen(
                     vm = vm,
                     onOpenAlbum = { id -> nav.navigate("album/$id") },
                     onOpenSmart = { kind -> nav.navigate("smart/$kind") },
+                    onOpenSettings = { nav.navigate("settings") },
                 )
             }
             composable("search") { SearchScreen(vm, onOpen = openViewer) }
-            composable("settings") { SettingsScreen(vm) }
+            composable(
+                route = "settings",
+                enterTransition = { slideInHorizontally(tween(300)) { it / 5 } + fadeIn(tween(300)) },
+                popExitTransition = { slideOutHorizontally(tween(260)) { it / 5 } + fadeOut(tween(220)) },
+            ) { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
 
             composable(
                 route = "album/{id}",

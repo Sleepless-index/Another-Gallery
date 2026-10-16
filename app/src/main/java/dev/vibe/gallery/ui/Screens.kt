@@ -100,7 +100,7 @@ private fun SelectionBarHost(
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-fun PhotosScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit) {
+fun PhotosScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit, onOpenSettings: () -> Unit) {
     val entries by vm.photoEntries.collectAsStateWithLifecycle()
     val items by vm.items.collectAsStateWithLifecycle()
     val prefs by vm.prefs.collectAsStateWithLifecycle()
@@ -143,6 +143,13 @@ fun PhotosScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit) {
                                         onClick = {
                                             menu = false
                                             vm.refresh()
+                                        },
+                                    )
+                                    CompactMenuItem(
+                                        text = { Text("Settings") },
+                                        onClick = {
+                                            menu = false
+                                            onOpenSettings()
                                         },
                                     )
                                 }
@@ -194,9 +201,9 @@ fun CollectionScreen(
     val favs by vm.favorites.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
     val selectMode by vm.selectMode.collectAsStateWithLifecycle()
-    val entries = remember(items, flat) {
-        // "flat" = one continuous grid with no date headers (the Recent album)
-        if (flat) items.map { Entry.Media(it) } else buildEntries(items)
+    val entries = remember(items, flat, trash) {
+        // "flat" = one continuous grid with no date headers (Recent album and Trash)
+        if (flat || trash) items.map { Entry.Media(it) } else buildEntries(items)
     }
 
     Box(Modifier.fillMaxSize()) {
