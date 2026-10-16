@@ -1,6 +1,13 @@
 package dev.vibe.gallery.ui
 
 import androidx.compose.animation.AnimatedContent
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.clickable
 import dev.vibe.gallery.data.thumbRequest
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.util.lerp
@@ -125,7 +132,6 @@ fun MediaTile(
     baseCorner: Dp,
     thumbPx: Int,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val ctx = LocalContext.current
@@ -150,7 +156,7 @@ fun MediaTile(
                 clip = true
             }
             .background(Color(0xFF1A1A1A))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .clickable(onClick = onClick),
     ) {
         val request = remember(item.uri, thumbPx) {
             thumbRequest(ctx, item.uri, thumbPx, item.isVideo)
@@ -258,7 +264,7 @@ fun MediaCollection(
     selectMode: Boolean,
     favorites: Set<Long>,
     onClick: (MediaItem) -> Unit,
-    onLongClick: (MediaItem) -> Unit,
+    onSetSelected: (Long, Boolean) -> Unit,
     bottomPad: Dp,
     modifier: Modifier = Modifier,
     emptyText: String = "Nothing here yet",
@@ -278,6 +284,12 @@ fun MediaCollection(
     // Pinterest-style: one continuous feed. Date headers would force both columns to line up
     // and leave gaps, so the masonry layout skips them.
     val masonryEntries = remember(entries) { entries.filterIsInstance<Entry.Media>() }
+    val keyToId = remember(entries) { entries.filterIsInstance<Entry.Media>().associate { it.key to it.item.id } }
+    val currentLayout by rememberUpdatedState(layout)
+    val currentSelected by rememberUpdatedState(selected)
+    val currentOnSet by rememberUpdatedState(onSetSelected)
+    val dragScope = rememberCoroutineScope()
+    var dragging by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
     val staggeredState = rememberLazyStaggeredGridState()
     val density = LocalDensity.current
@@ -285,7 +297,76 @@ fun MediaCollection(
     val gridThumb = (screenWidthPx / columns * 1.15f).toInt().coerceIn(160, 640)
     val masonryThumb = (screenWidthPx * 0.62f).toInt().coerceIn(320, 800)
 
-    Box(modifier.fillMaxSize()) {
+    fun idAt(pos: Offset): Long? {
+        val x = pos.x.toInt()
+        val y = pos.y.toInt()
+        val key: Any? = if (currentLayout == LayoutMode.GRID) {
+            gridState.layoutInfo.visibleItemsInfo.firstOrNull {
+                x >= it.offset.x && x < it.offset.x + it.size.width &&
+                    y >= it.offset.y && y < it.offset.y + it.size.height
+            }?.key
+        } else {
+            staggeredState.layoutInfo.visibleItemsInfo.firstOrNull {
+                x >= it.offset.x && x < it.offset.x + it.size.width &&
+                    y >= it.offset.y && y < it.offset.y + it.size.height
+            }?.key
+        }
+        return (key as? String)?.let { keyToId[it] }
+    }
+
+    Box(
+        modifier
+            .fillMaxSize()
+            // Long-press a tile, then drag across others to select (or unselect) many at once.
+            .pointerInput(Unit) {
+                var mode = true
+                val visited = HashSet<Long>()
+                var job: Job? = null
+                var last = Offset.Zero
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { pos ->
+                        last = pos
+                        visited.clear()
+                        val id = idAt(pos)
+                        if (id != null) {
+                            mode = id !in currentSelected
+                            visited += id
+                            currentOnSet(id, mode)
+                        }
+                        dragging = true
+                        job = dragScope.launch {
+                            while (true) {
+                                val dy = when {
+                                    last.y < 140f -> -26f
+                                    last.y > size.height - 140f -> 26f
+                                    else -> 0f
+                                }
+                                if (dy != 0f) {
+                                    if (currentLayout == LayoutMode.GRID) gridState.scrollBy(dy) else staggeredState.scrollBy(dy)
+                                    val other = idAt(last)
+                                    if (other != null && visited.add(other)) currentOnSet(other, mode)
+                                }
+                                delay(16)
+                            }
+                        }
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        last = change.position
+                        val id = idAt(last)
+                        if (id != null && visited.add(id)) currentOnSet(id, mode)
+                    },
+                    onDragEnd = {
+                        job?.cancel()
+                        dragging = false
+                    },
+                    onDragCancel = {
+                        job?.cancel()
+                        dragging = false
+                    },
+                )
+            },
+    ) {
         AnimatedContent(
             targetState = layout,
             transitionSpec = { fadeIn(tween(240)) togetherWith fadeOut(tween(160)) },
@@ -295,6 +376,7 @@ fun MediaCollection(
                 if (mode == LayoutMode.GRID) {
                     LazyVerticalGrid(
                         state = gridState,
+                        userScrollEnabled = !dragging,
                         columns = GridCells.Fixed(columns),
                         contentPadding = PaddingValues(bottom = bottomPad),
                         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -323,7 +405,6 @@ fun MediaCollection(
                                     baseCorner = 0.dp,
                                     thumbPx = gridThumb,
                                     onClick = { onClick(e.item) },
-                                    onLongClick = { onLongClick(e.item) },
                                     modifier = Modifier
                                         .animateItem()
                                         .aspectRatio(1f),
@@ -334,6 +415,7 @@ fun MediaCollection(
                 } else {
                     LazyVerticalStaggeredGrid(
                         state = staggeredState,
+                        userScrollEnabled = !dragging,
                         columns = StaggeredGridCells.Fixed(2),
                         contentPadding = PaddingValues(start = 6.dp, end = 6.dp, bottom = bottomPad),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -362,7 +444,6 @@ fun MediaCollection(
                                     baseCorner = 16.dp,
                                     thumbPx = masonryThumb,
                                     onClick = { onClick(e.item) },
-                                    onLongClick = { onLongClick(e.item) },
                                     modifier = Modifier
                                         .animateItem()
                                         .fillMaxWidth()
@@ -389,6 +470,7 @@ fun SelectionBar(
     val favs by vm.favorites.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val has = selected.isNotEmpty()
+    var picker by remember { mutableStateOf(false) }
 
     PillBar(modifier) {
         if (!trash) {
@@ -403,6 +485,16 @@ fun SelectionBar(
                 label = if (allFav) "Unfavorite" else "Favorite",
                 selected = allFav,
                 onClick = { if (has) vm.toggleFavorite(selected) },
+                modifier = Modifier.weight(1f),
+            )
+            PillItem(
+                icon = GIcons.Albums, label = "Album", selected = false,
+                onClick = { if (has) picker = true },
+                modifier = Modifier.weight(1f),
+            )
+            PillItem(
+                icon = GIcons.Lock, label = "Vault", selected = false,
+                onClick = { if (has) vm.moveToVault(source.filter { it.id in selected }) },
                 modifier = Modifier.weight(1f),
             )
             PillItem(
@@ -422,5 +514,13 @@ fun SelectionBar(
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+    if (picker) {
+        AlbumPickerSheet(
+            vm = vm,
+            items = source.filter { it.id in selected },
+            initialMove = false,
+            onDismiss = { picker = false },
+        )
     }
 }
