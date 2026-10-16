@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.vibe.gallery.data.Entry
 import dev.vibe.gallery.data.LayoutMode
 import dev.vibe.gallery.data.MediaItem
+import dev.vibe.gallery.data.SortMode
 import dev.vibe.gallery.data.buildEntries
 import dev.vibe.gallery.data.monthLabel
 import dev.vibe.gallery.ui.theme.GIcons
@@ -81,6 +82,7 @@ private fun SelectionBarHost(
     source: List<MediaItem>,
     trash: Boolean,
     modifier: Modifier = Modifier,
+    vault: Boolean = false,
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -90,7 +92,11 @@ private fun SelectionBarHost(
     ) {
         Box {
             BottomFade(Modifier.align(Alignment.BottomCenter), height = 140.dp)
-            SelectionBar(vm = vm, source = source, trash = trash, modifier = Modifier.align(Alignment.BottomCenter))
+            if (vault) {
+                VaultSelectionBar(vm, source, Modifier.align(Alignment.BottomCenter))
+            } else {
+                SelectionBar(vm = vm, source = source, trash = trash, modifier = Modifier.align(Alignment.BottomCenter))
+            }
         }
     }
 }
@@ -102,7 +108,7 @@ private fun SelectionBarHost(
 @Composable
 fun PhotosScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit, onOpenSettings: () -> Unit) {
     val entries by vm.photoEntries.collectAsStateWithLifecycle()
-    val items by vm.items.collectAsStateWithLifecycle()
+    val items by vm.photos.collectAsStateWithLifecycle()
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     val favs by vm.favorites.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
@@ -136,6 +142,14 @@ fun PhotosScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit, o
                                             vm.setLayout(
                                                 if (prefs.layout == LayoutMode.GRID) LayoutMode.MASONRY else LayoutMode.GRID
                                             )
+                                        },
+                                    )
+                                    CompactMenuItem(
+                                        text = { Text("Sort: " + sortLabel(prefs.sort)) },
+                                        onClick = {
+                                            // Cycle through the sort modes; the full list is also in Settings.
+                                            val all = SortMode.values()
+                                            vm.setSort(all[(prefs.sort.ordinal + 1) % all.size])
                                         },
                                     )
                                     CompactMenuItem(
@@ -173,7 +187,7 @@ fun PhotosScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit, o
                         if (idx >= 0) onOpen(items, idx)
                     }
                 },
-                onLongClick = { item -> vm.toggle(item.id) },
+                onSetSelected = { id, on -> vm.setSelected(id, on) },
                 bottomPad = BottomBarSpace + navBottomInset(),
                 modifier = Modifier.weight(1f),
                 emptyText = "No photos or videos found",
@@ -196,14 +210,16 @@ fun CollectionScreen(
     onBack: () -> Unit,
     onOpen: (List<MediaItem>, Int) -> Unit,
     flat: Boolean = false,
+    vault: Boolean = false,
+    trailingExtra: @Composable () -> Unit = {},
 ) {
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     val favs by vm.favorites.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
     val selectMode by vm.selectMode.collectAsStateWithLifecycle()
-    val entries = remember(items, flat, trash) {
+    val entries = remember(items, flat, trash, vault) {
         // "flat" = one continuous grid with no date headers (Recent album and Trash)
-        if (flat || trash) items.map { Entry.Media(it) } else buildEntries(items)
+        if (flat || trash || vault) items.map { Entry.Media(it) } else buildEntries(items)
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -224,6 +240,7 @@ fun CollectionScreen(
                             Box(Modifier.size(12.dp))
                         },
                         trailing = {
+                            trailingExtra()
                             GIconButton(GIcons.CheckCircle, "Select items", onClick = { vm.startSelect() })
                         },
                     )
@@ -244,13 +261,13 @@ fun CollectionScreen(
                         if (idx >= 0) onOpen(items, idx)
                     }
                 },
-                onLongClick = { item -> vm.toggle(item.id) },
+                onSetSelected = { id, on -> vm.setSelected(id, on) },
                 bottomPad = BottomBarSpace + navBottomInset(),
                 modifier = Modifier.weight(1f),
-                emptyText = if (trash) "Trash is empty" else "Nothing here yet",
+                emptyText = if (trash) "Trash is empty" else if (vault) "Your Vault is empty" else "Nothing here yet",
             )
         }
-        SelectionBarHost(selectMode, vm, items, trash = trash, modifier = Modifier.align(Alignment.BottomCenter))
+        SelectionBarHost(selectMode, vm, items, trash = trash, modifier = Modifier.align(Alignment.BottomCenter), vault = vault)
     }
 }
 
@@ -379,7 +396,7 @@ fun SearchScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit) {
                         if (idx >= 0) onOpen(results, idx)
                     }
                 },
-                onLongClick = { item -> vm.toggle(item.id) },
+                onSetSelected = { id, on -> vm.setSelected(id, on) },
                 bottomPad = BottomBarSpace + navBottomInset(),
                 modifier = Modifier.weight(1f),
                 emptyText = if (query.isBlank() && filter == 0) "Search your library" else "No matches",
@@ -407,4 +424,12 @@ fun FilterChipPill(label: String, active: Boolean, onClick: () -> Unit) {
             .bounceClick(role = androidx.compose.ui.semantics.Role.Tab, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 9.dp),
     )
+}
+
+fun sortLabel(mode: SortMode): String = when (mode) {
+    SortMode.DATE_DESC -> "Newest"
+    SortMode.DATE_ASC -> "Oldest"
+    SortMode.NAME_ASC -> "Name A–Z"
+    SortMode.NAME_DESC -> "Name Z–A"
+    SortMode.SIZE_DESC -> "Largest"
 }

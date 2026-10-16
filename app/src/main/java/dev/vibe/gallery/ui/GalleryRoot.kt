@@ -56,7 +56,13 @@ import dev.vibe.gallery.ui.theme.GIcons
 private val TabRoutes = setOf("photos", "albums", "search")
 
 @Composable
-fun GalleryRoot(vm: GalleryViewModel, hasPermission: Boolean, onRequestPermission: () -> Unit) {
+fun GalleryRoot(
+    vm: GalleryViewModel,
+    hasPermission: Boolean,
+    onRequestPermission: () -> Unit,
+    onAuthenticate: (onSuccess: () -> Unit) -> Unit,
+    onSecure: (Boolean) -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
 
     if (!hasPermission) {
@@ -70,6 +76,13 @@ fun GalleryRoot(vm: GalleryViewModel, hasPermission: Boolean, onRequestPermissio
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     val isTab = route in TabRoutes
+
+    val vaultOpen by vm.vaultUnlocked.collectAsStateWithLifecycle()
+    LaunchedEffect(vaultOpen, route) { onSecure(vaultOpen && (route == "vault" || route?.startsWith("viewer") == true || route?.startsWith("player") == true || route?.startsWith("editor") == true)) }
+    // Leaving the vault locks it again.
+    LaunchedEffect(route) {
+        if (vaultOpen && route != null && route != "vault" && !route.startsWith("viewer") && !route.startsWith("player")) vm.lockVault()
+    }
 
     BackHandler(enabled = selectMode) { vm.clearSelection() }
     LaunchedEffect(route) { vm.clearSelection() }
@@ -96,6 +109,8 @@ fun GalleryRoot(vm: GalleryViewModel, hasPermission: Boolean, onRequestPermissio
                     onOpenAlbum = { id -> nav.navigate("album/$id") },
                     onOpenSmart = { kind -> nav.navigate("smart/$kind") },
                     onOpenSettings = { nav.navigate("settings") },
+                    onOpenVault = { nav.navigate("vault") },
+                    onOpenCleanup = { nav.navigate("cleanup") },
                 )
             }
             composable("search") { SearchScreen(vm, onOpen = openViewer) }
@@ -104,6 +119,36 @@ fun GalleryRoot(vm: GalleryViewModel, hasPermission: Boolean, onRequestPermissio
                 enterTransition = { slideInHorizontally(tween(300)) { it / 5 } + fadeIn(tween(300)) },
                 popExitTransition = { slideOutHorizontally(tween(260)) { it / 5 } + fadeOut(tween(220)) },
             ) { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
+
+            composable(
+                route = "vault",
+                enterTransition = { slideInHorizontally(tween(300)) { it / 5 } + fadeIn(tween(300)) },
+                popExitTransition = { slideOutHorizontally(tween(260)) { it / 5 } + fadeOut(tween(220)) },
+            ) {
+                VaultScreen(
+                    vm = vm,
+                    onAuthenticate = onAuthenticate,
+                    onBack = { nav.popBackStack() },
+                    onOpen = openViewer,
+                )
+            }
+            composable(
+                route = "cleanup",
+                enterTransition = { slideInHorizontally(tween(300)) { it / 5 } + fadeIn(tween(300)) },
+                popExitTransition = { slideOutHorizontally(tween(260)) { it / 5 } + fadeOut(tween(220)) },
+            ) {
+                CleanupScreen(
+                    vm = vm,
+                    onBack = { nav.popBackStack() },
+                    onOpenDuplicates = { nav.navigate("duplicates") },
+                    onOpenSmart = { kind -> nav.navigate("smart/$kind") },
+                )
+            }
+            composable(
+                route = "duplicates",
+                enterTransition = { slideInHorizontally(tween(300)) { it / 5 } + fadeIn(tween(300)) },
+                popExitTransition = { slideOutHorizontally(tween(260)) { it / 5 } + fadeOut(tween(220)) },
+            ) { DuplicatesScreen(vm, onBack = { nav.popBackStack() }, onOpen = openViewer) }
 
             composable(
                 route = "album/{id}",
@@ -141,12 +186,16 @@ fun GalleryRoot(vm: GalleryViewModel, hasPermission: Boolean, onRequestPermissio
                     "recent" -> "Recent"
                     "videos" -> "Videos"
                     "trash" -> "Trash"
+                    "large" -> "Large files"
+                    "screenshots" -> "Screenshots"
                     else -> "Favorites"
                 }
                 val list = when (kind) {
                     "recent" -> allItems.take(RecentLimit)
                     "videos" -> videos
                     "trash" -> trashed
+                    "large" -> remember(allItems) { allItems.filter { it.sizeBytes >= LargeBytes }.sortedByDescending { it.sizeBytes } }
+                    "screenshots" -> remember(allItems) { allItems.filter { isScreenshot(it) } }
                     else -> favorites
                 }
                 CollectionScreen(
@@ -154,7 +203,7 @@ fun GalleryRoot(vm: GalleryViewModel, hasPermission: Boolean, onRequestPermissio
                     title = title,
                     items = list,
                     trash = kind == "trash",
-                    flat = kind == "recent",
+                    flat = kind == "recent" || kind == "large" || kind == "screenshots",
                     onBack = { nav.popBackStack() },
                     onOpen = openViewer,
                 )
