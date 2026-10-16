@@ -26,6 +26,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,28 +65,21 @@ fun copyToClipboard(context: Context, item: MediaItem) {
 @Composable
 fun InfoSheet(
     item: MediaItem,
-    inVault: Boolean,
     onDismiss: () -> Unit,
-    onShare: () -> Unit,
-    onClipboard: () -> Unit,
-    onHide: () -> Unit,
-    onUseAs: () -> Unit,
-    onCopy: () -> Unit,
-    onMove: () -> Unit,
-    onEdit: () -> Unit,
-    onPrint: () -> Unit,
+    onRename: (String) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
     val info by produceState(Info(emptyList()), item.id) { value = readInfo(context, item) }
     val dateFmt = DateTimeFormatter.ofPattern("MMMM d, yyyy  •  h:mm a", Locale.getDefault())
     val whenText = dateFmt.format(Instant.ofEpochMilli(item.dateMs).atZone(ZoneId.systemDefault()))
-    val card = RoundedCornerShape(26.dp)
+    val card = RoundedCornerShape(24.dp)
+    var renaming by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = cs.surface,
+        containerColor = cs.surface.copy(alpha = 0.72f),
         contentColor = cs.onBackground,
     ) {
         Column(
@@ -95,73 +91,49 @@ fun InfoSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // Header card: when it was taken
-            Column(
-                Modifier.fillMaxWidth().clip(card).background(cs.surfaceVariant).padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(whenText, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = cs.onBackground)
-                Text(
-                    listOfNotNull(
-                        if (item.isVideo) "Video" else "Photo",
-                        item.bucketName.takeIf { it.isNotBlank() },
-                    ).joinToString("  •  "),
-                    fontSize = 14.sp,
-                    color = cs.onSurfaceVariant,
-                )
+            Box(Modifier.fillMaxWidth().clip(card).background(cs.surfaceVariant.copy(alpha = 0.6f)).padding(horizontal = 20.dp, vertical = 18.dp)) {
+                Text(whenText, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = cs.onBackground)
             }
 
             // Detail rows
             Column(
-                Modifier.fillMaxWidth().clip(card).background(cs.surfaceVariant).padding(vertical = 8.dp),
+                Modifier.fillMaxWidth().clip(card).background(cs.surfaceVariant.copy(alpha = 0.6f)).padding(vertical = 6.dp),
             ) {
-                for (r in info.rows) InfoLine(r)
-            }
-
-            // Actions
-            val actions = buildList {
-                add(Triple(GIcons.Share, "Share", onShare))
-                if (!item.isVideo) add(Triple(GIcons.Clipboard, "Copy to clipboard", onClipboard))
-                if (!inVault) add(Triple(GIcons.Lock, "Hide", onHide))
-                if (!item.isVideo) add(Triple(GIcons.Image, "Use as", onUseAs))
-                if (!inVault) {
-                    add(Triple(GIcons.Copy, "Copy", onCopy))
-                    add(Triple(GIcons.Move, "Move", onMove))
-                }
-                if (!item.isVideo) {
-                    add(Triple(GIcons.Edit, "Edit", onEdit))
-                    add(Triple(GIcons.Photos, "Print", onPrint))
-                }
-            }
-            actions.chunked(2).forEach { pair ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    pair.forEach { (icon, label, click) ->
-                        Row(
-                            Modifier
-                                .weight(1f)
-                                .height(58.dp)
-                                .clip(RoundedCornerShape(22.dp))
-                                .background(cs.surfaceVariant)
-                                .bounceClick(onClick = { onDismiss(); click() })
-                                .padding(horizontal = 18.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        ) {
-                            Icon(icon, null, tint = cs.onBackground, modifier = Modifier.size(22.dp))
-                            Text(
-                                label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                                color = cs.onBackground, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                    if (pair.size == 1) Box(Modifier.weight(1f))
-                }
+                for (r in info.rows) InfoLine(r, onEdit = if (r.title == "Label" && item.id >= 0) ({ renaming = true }) else null)
             }
         }
     }
+    if (renaming) RenameDialog(item.name, onDismiss = { renaming = false }, onConfirm = { renaming = false; onRename(it) })
 }
 
 @Composable
-private fun InfoLine(row: InfoRow) {
+private fun RenameDialog(current: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val ext = current.substringAfterLast('.', "").let { if (it.isEmpty()) "" else ".$it" }
+    var text by remember { mutableStateOf(current.removeSuffix(ext)) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = cs.surface,
+        title = { Text("Rename", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                suffix = { Text(ext, color = cs.onSurfaceVariant) },
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = { val n = text.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_"); if (n.isNotEmpty()) onConfirm(n + ext) },
+            ) { Text("Rename") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun InfoLine(row: InfoRow, onEdit: (() -> Unit)? = null) {
     val cs = MaterialTheme.colorScheme
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -169,14 +141,24 @@ private fun InfoLine(row: InfoRow) {
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(cs.surface),
+            Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(cs.surface.copy(alpha = 0.7f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(row.icon, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(20.dp))
+            Icon(row.icon, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(18.dp))
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(row.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground)
-            Text(row.value, fontSize = 14.sp, color = cs.onSurfaceVariant)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(row.title, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground)
+            Text(row.value, fontSize = 12.5.sp, color = cs.onSurfaceVariant)
+        }
+        if (onEdit != null) {
+            Text(
+                "Edit", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(cs.surface.copy(alpha = 0.7f))
+                    .bounceClick(onClick = onEdit)
+                    .padding(horizontal = 16.dp, vertical = 9.dp),
+            )
         }
     }
 }
