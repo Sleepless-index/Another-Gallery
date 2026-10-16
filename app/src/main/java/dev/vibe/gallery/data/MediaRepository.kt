@@ -133,7 +133,7 @@ class MediaRepository(private val context: Context) {
                 var w = c.getInt(iW)
                 var h = c.getInt(iH)
                 val orientation = c.getInt(iOri)
-                if (!isVideo && (orientation == 90 || orientation == 270)) {
+                if (orientation == 90 || orientation == 270) {
                     val t = w; w = h; h = t
                 }
                 val base = if (isVideo) {
