@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -192,7 +193,7 @@ fun ViewerScreen(
                 Box {
                     GIconButton(GIcons.More, "More options", onClick = { menu = true }, container = ChromeBg, tint = Color.White)
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(
+                        CompactMenuItem(
                             text = { Text("Details") },
                             onClick = {
                                 menu = false
@@ -268,7 +269,7 @@ private fun VideoPage(
             .padding(top = insetTop, bottom = insetBottom),
         contentAlignment = Alignment.Center,
     ) {
-        val request = remember(item.uri) { ImageRequest.Builder(ctx).data(item.uri).size(1280).build() }
+        val request = remember(item.uri) { dev.vibe.gallery.data.thumbRequest(ctx, item.uri, 1280) }
         // The frame hugs the video, so the duration badge sits on the video's own bottom-right corner.
         Box(
             modifier = Modifier
@@ -297,18 +298,7 @@ private fun VideoPage(
                     tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(32.dp),
                 )
             }
-            Text(
-                text = formatDuration(item.durationMs),
-                color = Color.White,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(10.dp)
-                    .clip(CircleShape)
-                    .background(ChromeBg)
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            )
+            DurationBadge(item.durationMs, Modifier.align(Alignment.BottomEnd).padding(6.dp))
         }
     }
 }
@@ -476,6 +466,7 @@ private fun InfoSheet(item: MediaItem, onDismiss: () -> Unit) {
     }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = cs.surface,
         contentColor = cs.onBackground,
     ) {
@@ -483,7 +474,8 @@ private fun InfoSheet(item: MediaItem, onDismiss: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 24.dp, end = 24.dp, bottom = 28.dp),
+                .navigationBarsPadding()
+                .padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {

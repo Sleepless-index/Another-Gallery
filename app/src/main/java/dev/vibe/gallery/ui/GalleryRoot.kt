@@ -130,13 +130,16 @@ fun GalleryRoot(vm: GalleryViewModel, hasPermission: Boolean, onRequestPermissio
                 val favorites by vm.favoriteItems.collectAsStateWithLifecycle()
                 val videos by vm.videos.collectAsStateWithLifecycle()
                 val trashed by vm.trashed.collectAsStateWithLifecycle()
+                val allItems by vm.items.collectAsStateWithLifecycle()
                 LaunchedEffect(kind) { if (kind == "trash") vm.loadTrash() }
                 val title = when (kind) {
+                    "recent" -> "Recent"
                     "videos" -> "Videos"
                     "trash" -> "Trash"
                     else -> "Favorites"
                 }
                 val list = when (kind) {
+                    "recent" -> allItems.take(RecentLimit)
                     "videos" -> videos
                     "trash" -> trashed
                     else -> favorites
@@ -146,6 +149,7 @@ fun GalleryRoot(vm: GalleryViewModel, hasPermission: Boolean, onRequestPermissio
                     title = title,
                     items = list,
                     trash = kind == "trash",
+                    flat = kind == "recent",
                     onBack = { nav.popBackStack() },
                     onOpen = openViewer,
                 )

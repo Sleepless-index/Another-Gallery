@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -108,23 +109,23 @@ fun ScreenHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 6.dp),
+            .padding(start = 20.dp, end = 12.dp, top = 6.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         leading()
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 30.sp,
+                fontSize = 25.sp,
                 fontWeight = FontWeight.ExtraBold,
-                letterSpacing = (-0.6).sp,
+                letterSpacing = (-0.5).sp,
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
             )
             if (subtitle.isNotEmpty()) {
                 Text(
                     text = subtitle,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -293,4 +294,23 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 10.dp),
     )
+}
+
+/** Proper red for favorite hearts. */
+val HeartRed = androidx.compose.ui.graphics.Color(0xFFFF3B47)
+
+/** Menu row sized to its text instead of Material's wide 112dp minimum. */
+@Composable
+fun CompactMenuItem(
+    text: @Composable () -> Unit,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.45f)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+    ) { text() }
 }

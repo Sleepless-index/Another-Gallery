@@ -1,6 +1,13 @@
 package dev.vibe.gallery.ui
 
 import androidx.compose.animation.AnimatedContent
+import dev.vibe.gallery.data.thumbRequest
+import androidx.compose.foundation.shape.CircleShape
+import dev.vibe.gallery.data.reorderForMasonry
+import androidx.compose.ui.util.lerp
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -125,30 +132,29 @@ fun MediaTile(
     val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
 
-    val scale by animateFloatAsState(
-        targetValue = if (selected) 0.86f else 1f,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
-        label = "tileScale",
+    // One animated value drives scale, corners and dimming; it is only read while drawing,
+    // so selecting a tile never recomposes it per frame.
+    val sel by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow),
+        label = "tileSel",
     )
-    val corner by animateDpAsState(
-        targetValue = if (selected) maxOf(baseCorner, 14.dp) else baseCorner,
-        animationSpec = tween(180),
-        label = "tileCorner",
-    )
-    val dim by animateFloatAsState(if (selected) 0.38f else 0f, tween(180), label = "tileDim")
 
     Box(
         modifier = modifier
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                val sc = 1f - 0.14f * sel
+                scaleX = sc
+                scaleY = sc
+                val base = baseCorner.toPx()
+                shape = RoundedCornerShape(lerp(base, maxOf(base, 14.dp.toPx()), sel.coerceIn(0f, 1f)))
+                clip = true
             }
-            .clip(RoundedCornerShape(corner))
             .background(Color(0xFF1A1A1A))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         val request = remember(item.uri, thumbPx) {
-            ImageRequest.Builder(ctx).data(item.uri).size(thumbPx).build()
+            thumbRequest(ctx, item.uri, thumbPx)
         }
         AsyncImage(
             model = request,
@@ -157,44 +163,33 @@ fun MediaTile(
             modifier = Modifier.fillMaxSize(),
         )
 
-        if (dim > 0f) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = dim))
-            )
-        }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .drawBehind { drawRect(Color.Black.copy(alpha = (0.38f * sel).coerceIn(0f, 0.38f))) }
+        )
 
         if (item.isVideo) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(6.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.Black.copy(alpha = 0.62f))
-                    .padding(start = 5.dp, end = 7.dp, top = 2.dp, bottom = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Icon(GIcons.Play, contentDescription = null, tint = Color.White, modifier = Modifier.size(10.dp))
-                Text(
-                    text = formatDuration(item.durationMs),
-                    color = Color.White,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            DurationBadge(item.durationMs, Modifier.align(Alignment.BottomEnd).padding(6.dp))
         }
 
         AnimatedVisibility(
             visible = isFav,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(7.dp),
+                .padding(6.dp),
             enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
             exit = scaleOut() + fadeOut(),
         ) {
-            Icon(GIcons.HeartFilled, contentDescription = null, tint = cs.primary, modifier = Modifier.size(14.dp))
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.38f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(GIcons.HeartFilled, contentDescription = null, tint = HeartRed, modifier = Modifier.size(19.dp))
+            }
         }
 
         AnimatedVisibility(
@@ -234,12 +229,33 @@ fun MediaTile(
     }
 }
 
+/** Small "play + length" badge used on tiles and on the viewer's video preview. */
+@Composable
+fun DurationBadge(durationMs: Long, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.Black.copy(alpha = 0.62f))
+            .padding(start = 5.dp, end = 7.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Icon(GIcons.Play, contentDescription = null, tint = Color.White, modifier = Modifier.size(10.dp))
+        Text(
+            text = formatDuration(durationMs),
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
 /** Thin draggable scrollbar with a month bubble. Appears while scrolling, fades out after. */
 @Composable
 fun FastScroller(
-    totalCount: Int,
-    firstVisibleIndex: Int,
-    isScrolling: Boolean,
+    totalCountProvider: () -> Int,
+    firstVisibleProvider: () -> Int,
+    scrollingProvider: () -> Boolean,
     labelAt: (Int) -> String,
     scrollTo: suspend (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -249,6 +265,10 @@ fun FastScroller(
     var trackHeight by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val cs = MaterialTheme.colorScheme
+    // Read through derived state so only this small composable updates while the list scrolls.
+    val totalCount by remember { derivedStateOf(totalCountProvider) }
+    val firstVisibleIndex by remember { derivedStateOf(firstVisibleProvider) }
+    val isScrolling by remember { derivedStateOf(scrollingProvider) }
 
     val visible = (isScrolling || dragging) && totalCount > 60
     val alpha by animateFloatAsState(
@@ -311,6 +331,7 @@ fun FastScroller(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .offset { IntOffset(0, thumbY + (thumbHeightPx / 2f).roundToInt() - 14.dp.roundToPx()) }
+                .wrapContentWidth(Alignment.End, unbounded = true)
                 .padding(end = 18.dp),
             enter = fadeIn(tween(100)) + scaleIn(tween(120), initialScale = 0.8f),
             exit = fadeOut(tween(160)) + scaleOut(tween(160), targetScale = 0.8f),
@@ -318,6 +339,8 @@ fun FastScroller(
             val idx = (dragFraction * (totalCount - 1).coerceAtLeast(0)).roundToInt()
             Text(
                 text = labelAt(idx),
+                maxLines = 1,
+                softWrap = false,
                 color = cs.onPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -356,6 +379,7 @@ fun MediaCollection(
         return
     }
 
+    val masonryEntries = remember(entries) { reorderForMasonry(entries) }
     val gridState = rememberLazyGridState()
     val staggeredState = rememberLazyStaggeredGridState()
     val labelAt = remember(entries) { { idx: Int -> monthLabel(entries.getOrNull(idx)?.dateMs ?: 0L) } }
@@ -411,12 +435,12 @@ fun MediaCollection(
                         }
                     }
                     FastScroller(
-                        totalCount = gridState.layoutInfo.totalItemsCount,
-                        firstVisibleIndex = gridState.firstVisibleItemIndex,
-                        isScrolling = gridState.isScrollInProgress,
+                        totalCountProvider = { gridState.layoutInfo.totalItemsCount },
+                        firstVisibleProvider = { gridState.firstVisibleItemIndex },
+                        scrollingProvider = { gridState.isScrollInProgress },
                         labelAt = labelAt,
                         scrollTo = { gridState.scrollToItem(it) },
-                        modifier = Modifier.align(Alignment.CenterEnd),
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(top = 8.dp, bottom = bottomPad),
                     )
                 } else {
                     LazyVerticalStaggeredGrid(
@@ -428,7 +452,7 @@ fun MediaCollection(
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         items(
-                            items = entries,
+                            items = masonryEntries,
                             key = { it.key },
                             contentType = { it::class },
                             span = { e ->
@@ -451,7 +475,7 @@ fun MediaCollection(
                                     selectMode = selectMode,
                                     selected = e.item.id in selected,
                                     baseCorner = 16.dp,
-                                    thumbPx = masonryThumb,
+                                    thumbPx = if (e.item.aspect >= 1.15f) (masonryThumb * 2).coerceAtMost(1080) else masonryThumb,
                                     onClick = { onClick(e.item) },
                                     onLongClick = { onLongClick(e.item) },
                                     modifier = Modifier
@@ -463,12 +487,12 @@ fun MediaCollection(
                         }
                     }
                     FastScroller(
-                        totalCount = staggeredState.layoutInfo.totalItemsCount,
-                        firstVisibleIndex = staggeredState.firstVisibleItemIndex,
-                        isScrolling = staggeredState.isScrollInProgress,
+                        totalCountProvider = { staggeredState.layoutInfo.totalItemsCount },
+                        firstVisibleProvider = { staggeredState.firstVisibleItemIndex },
+                        scrollingProvider = { staggeredState.isScrollInProgress },
                         labelAt = labelAt,
                         scrollTo = { staggeredState.scrollToItem(it) },
-                        modifier = Modifier.align(Alignment.CenterEnd),
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(top = 8.dp, bottom = bottomPad),
                     )
                 }
             }

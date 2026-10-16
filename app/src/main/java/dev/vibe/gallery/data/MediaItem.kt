@@ -81,6 +81,55 @@ fun buildEntries(items: List<MediaItem>): List<Entry> {
     return out
 }
 
+/**
+ * Masonry helper: landscape items span the whole row, which would leave a hole under the
+ * shorter column. Before each landscape item, pull later portrait items forward (within the
+ * same day) until the two columns are about even.
+ */
+fun reorderForMasonry(entries: List<Entry>): List<Entry> {
+    val out = ArrayList<Entry>(entries.size)
+    var i = 0
+    while (i < entries.size) {
+        val e = entries[i]
+        if (e is Entry.Header) {
+            out.add(e)
+            i++
+            continue
+        }
+        val segment = ArrayList<Entry.Media>()
+        while (i < entries.size && entries[i] is Entry.Media) {
+            segment.add(entries[i] as Entry.Media)
+            i++
+        }
+        var left = 0f
+        var right = 0f
+        val pending = ArrayList(segment)
+        while (pending.isNotEmpty()) {
+            val next = pending[0]
+            val wide = next.item.aspect >= 1.15f
+            if (!wide) {
+                pending.removeAt(0)
+                out.add(next)
+                val h = 1f / next.item.aspect
+                if (left <= right) left += h else right += h
+            } else if (kotlin.math.abs(left - right) > 0.3f && pending.any { it.item.aspect < 1.15f }) {
+                val idx = pending.indexOfFirst { it.item.aspect < 1.15f }
+                val pulled = pending.removeAt(idx)
+                out.add(pulled)
+                val h = 1f / pulled.item.aspect
+                if (left <= right) left += h else right += h
+            } else {
+                pending.removeAt(0)
+                out.add(next)
+                val top = maxOf(left, right) + 1f / next.item.aspect
+                left = top
+                right = top
+            }
+        }
+    }
+    return out
+}
+
 fun buildAlbums(items: List<MediaItem>): List<Album> {
     val groups = LinkedHashMap<Long, MutableList<MediaItem>>()
     for (m in items) groups.getOrPut(m.bucketId) { ArrayList() }.add(m)
