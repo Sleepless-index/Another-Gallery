@@ -25,6 +25,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -113,7 +114,7 @@ fun InfoSheet(
             Column(
                 Modifier.fillMaxWidth().clip(card).background(cs.surfaceVariant).padding(vertical = 8.dp),
             ) {
-                info.rows.forEach { InfoLine(it) }
+                for (r in info.rows) InfoLine(r)
             }
 
             // Actions

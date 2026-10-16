@@ -86,6 +86,7 @@ import dev.vibe.gallery.data.MediaItem
 import dev.vibe.gallery.data.formatDuration
 import dev.vibe.gallery.data.formatSize
 import dev.vibe.gallery.ui.theme.GIcons
+import dev.vibe.gallery.util.shareItems
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
