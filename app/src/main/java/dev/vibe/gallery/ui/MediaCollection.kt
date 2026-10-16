@@ -156,7 +156,6 @@ fun MediaTile(
                 clip = true
             }
             .background(Color(0xFF1A1A1A))
-            .clickable(onClick = onClick),
     ) {
         val request = remember(item.uri, thumbPx) {
             thumbRequest(ctx, item.uri, thumbPx, item.isVideo)
@@ -284,6 +283,8 @@ fun MediaCollection(
     // Pinterest-style: one continuous feed. Date headers would force both columns to line up
     // and leave gaps, so the masonry layout skips them.
     val masonryEntries = remember(entries) { entries.filterIsInstance<Entry.Media>() }
+    val idToItem = remember(entries) { entries.filterIsInstance<Entry.Media>().associate { it.item.id to it.item } }
+    val currentOnClick by rememberUpdatedState(onClick)
     val keyToId = remember(entries) { entries.filterIsInstance<Entry.Media>().associate { it.key to it.item.id } }
     val currentLayout by rememberUpdatedState(layout)
     val currentSelected by rememberUpdatedState(selected)
@@ -317,6 +318,15 @@ fun MediaCollection(
     Box(
         modifier
             .fillMaxSize()
+            // Plain taps are resolved here (tiles have no click handler of their own), so a
+            // long-press + release can never be mistaken for a tap that would deselect.
+            .pointerInput(Unit) {
+                androidx.compose.foundation.gestures.detectTapGestures(onTap = { pos ->
+                    val id = idAt(pos)
+                    val item = id?.let { idToItem[it] }
+                    if (item != null) currentOnClick(item)
+                })
+            }
             // Long-press a tile, then drag across others to select (or unselect) many at once.
             .pointerInput(Unit) {
                 var mode = true

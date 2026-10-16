@@ -148,7 +148,6 @@ fun AlbumsScreen(
     onOpenSmart: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenVault: () -> Unit,
-    onOpenCleanup: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     val albums by vm.albums.collectAsStateWithLifecycle()
@@ -221,11 +220,6 @@ fun AlbumsScreen(
             item(key = "smart_vault") {
                 StaggerIn(3) {
                     SmartTile(GIcons.Lock, "Vault", "", cs.onBackground, onOpenVault)
-                }
-            }
-            item(key = "smart_cleanup") {
-                StaggerIn(4) {
-                    SmartTile(GIcons.Trash, "Cleanup", "", cs.onBackground, onOpenCleanup)
                 }
             }
             item(key = "label_all", span = { GridItemSpan(maxLineSpan) }) {

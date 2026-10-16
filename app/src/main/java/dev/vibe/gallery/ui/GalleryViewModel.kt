@@ -11,11 +11,8 @@ import dev.vibe.gallery.data.FavoriteEntity
 import dev.vibe.gallery.data.LayoutMode
 import dev.vibe.gallery.data.MediaItem
 import dev.vibe.gallery.data.Prefs
-import dev.vibe.gallery.data.DupGroup
-import dev.vibe.gallery.data.Cleanup
 import dev.vibe.gallery.data.MediaOps
 import dev.vibe.gallery.data.ResumeEntity
-import dev.vibe.gallery.data.SortMode
 import dev.vibe.gallery.data.VaultStore
 import dev.vibe.gallery.data.ThemeMode
 import dev.vibe.gallery.data.buildAlbums
@@ -58,29 +55,15 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     fun setAccent(v: Int) = viewModelScope.launch { g.settings.setAccent(v) }
     fun setResume(v: Boolean) = viewModelScope.launch { g.settings.setResume(v) }
     fun setAutoplay(v: Boolean) = viewModelScope.launch { g.settings.setAutoplay(v) }
-    fun setSort(v: SortMode) = viewModelScope.launch { g.settings.setSort(v) }
 
     // ---- media ----------------------------------------------------------
     val items: StateFlow<List<MediaItem>> = repo.items
     val loaded: StateFlow<Boolean> = repo.loaded
 
-    /** The Photos tab list, ordered by the chosen sort. */
-    val photos: StateFlow<List<MediaItem>> = combine(items, prefs.map { it.sort }.distinctUntilChanged()) { list, sort ->
-        when (sort) {
-            SortMode.DATE_DESC -> list
-            SortMode.DATE_ASC -> list.sortedBy { it.dateMs }
-            SortMode.NAME_ASC -> list.sortedBy { it.name.lowercase() }
-            SortMode.NAME_DESC -> list.sortedByDescending { it.name.lowercase() }
-            SortMode.SIZE_DESC -> list.sortedByDescending { it.sizeBytes }
-        }
-    }
-        .flowOn(Dispatchers.Default)
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val photos: StateFlow<List<MediaItem>> = items
 
-    /** Date headers only make sense when sorting by date. */
-    val photoEntries: StateFlow<List<Entry>> = combine(photos, prefs.map { it.sort }.distinctUntilChanged()) { list, sort ->
-        if (sort == SortMode.DATE_DESC || sort == SortMode.DATE_ASC) buildEntries(list) else list.map { Entry.Media(it) }
-    }
+    val photoEntries: StateFlow<List<Entry>> = items
+        .map { buildEntries(it) }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -206,7 +189,6 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onSystemDialogResult(ok: Boolean) {
         if (ok) {
-            _dups.value = DupState.Idle
             val gone = pendingIds.toHashSet()
             _viewerList.value = _viewerList.value.filter { it.id !in gone }
             clearSelection()
@@ -219,6 +201,15 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     fun copyToDir(list: List<MediaItem>, relativeDir: String, move: Boolean) {
         if (list.isEmpty()) return
         viewModelScope.launch {
+            val name = relativeDir.trimEnd('/').substringAfterLast('/')
+            if (move && MediaOps.hasAllFiles()) {
+                val n = MediaOps.moveItems(getApplication(), list, relativeDir)
+                clearSelection()
+                _viewerList.value = _viewerList.value.filter { v -> list.none { it.id == v.id } || n == 0 }
+                refresh()
+                message(if (n > 0) "Moved $n to $name" else "Couldn't move those files")
+                return@launch
+            }
             val done = MediaOps.copyItems(getApplication(), list, relativeDir)
             clearSelection()
             if (done.isEmpty()) {
@@ -287,28 +278,6 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
             clearSelection()
             _viewerList.value = _viewerList.value.filter { v -> list.none { it.id == v.id } }
             loadVault()
-        }
-    }
-
-    // ---- duplicates -----------------------------------------------------
-    sealed interface DupState {
-        data object Idle : DupState
-        data class Scanning(val done: Int, val total: Int) : DupState
-        data class Done(val groups: List<DupGroup>) : DupState
-    }
-
-    private val _dups = MutableStateFlow<DupState>(DupState.Idle)
-    val dups: StateFlow<DupState> = _dups
-    private var dupJob: kotlinx.coroutines.Job? = null
-
-    fun scanDuplicates() {
-        if (dupJob?.isActive == true) return
-        dupJob = viewModelScope.launch {
-            _dups.value = DupState.Scanning(0, 0)
-            val groups = Cleanup.findDuplicates(getApplication<Application>().contentResolver, items.value) { d, t ->
-                _dups.value = DupState.Scanning(d, t)
-            }
-            _dups.value = DupState.Done(groups)
         }
     }
 

@@ -61,7 +61,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.vibe.gallery.data.Entry
 import dev.vibe.gallery.data.LayoutMode
 import dev.vibe.gallery.data.MediaItem
-import dev.vibe.gallery.data.SortMode
 import dev.vibe.gallery.data.buildEntries
 import dev.vibe.gallery.data.monthLabel
 import dev.vibe.gallery.ui.theme.GIcons
@@ -142,14 +141,6 @@ fun PhotosScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit, o
                                             vm.setLayout(
                                                 if (prefs.layout == LayoutMode.GRID) LayoutMode.MASONRY else LayoutMode.GRID
                                             )
-                                        },
-                                    )
-                                    CompactMenuItem(
-                                        text = { Text("Sort: " + sortLabel(prefs.sort)) },
-                                        onClick = {
-                                            // Cycle through the sort modes; the full list is also in Settings.
-                                            val all = SortMode.values()
-                                            vm.setSort(all[(prefs.sort.ordinal + 1) % all.size])
                                         },
                                     )
                                     CompactMenuItem(
@@ -426,10 +417,3 @@ fun FilterChipPill(label: String, active: Boolean, onClick: () -> Unit) {
     )
 }
 
-fun sortLabel(mode: SortMode): String = when (mode) {
-    SortMode.DATE_DESC -> "Newest"
-    SortMode.DATE_ASC -> "Oldest"
-    SortMode.NAME_ASC -> "Name A–Z"
-    SortMode.NAME_DESC -> "Name Z–A"
-    SortMode.SIZE_DESC -> "Largest"
-}

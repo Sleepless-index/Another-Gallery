@@ -6,9 +6,60 @@ import android.net.Uri
 import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.media.MediaScannerConnection
+import android.os.Build
+import android.os.Environment
+import java.io.File
 import java.io.InputStream
 
 object MediaOps {
+
+    /** True when the app has "All files access" and can move files directly. */
+    fun hasAllFiles(): Boolean = Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()
+
+    private fun pathOf(context: Context, uri: Uri): String? =
+        runCatching {
+            context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DATA), null, null, null)?.use {
+                if (it.moveToFirst()) it.getString(0) else null
+            }
+        }.getOrNull()
+
+    /**
+     * Really moves files (a rename on the same storage, so it is instant and keeps the same
+     * file). Needs All files access. Returns how many files were moved.
+     */
+    suspend fun moveItems(context: Context, items: List<MediaItem>, relativeDir: String): Int =
+        withContext(Dispatchers.IO) {
+            val root = Environment.getExternalStorageDirectory()
+            val dir = File(root, relativeDir.trimEnd('/')).also { it.mkdirs() }
+            val touched = ArrayList<String>()
+            var moved = 0
+            for (item in items) {
+                val src = pathOf(context, item.uri)?.let { File(it) } ?: continue
+                if (!src.exists() || src.parentFile == dir) continue
+                var dest = File(dir, src.name)
+                var n = 1
+                while (dest.exists()) {
+                    dest = File(dir, "${src.nameWithoutExtension} ($n).${src.extension}")
+                    n++
+                }
+                val ok = src.renameTo(dest) || runCatching {
+                    src.copyTo(dest)
+                    src.delete()
+                }.getOrDefault(false)
+                if (ok) {
+                    moved++
+                    touched += src.absolutePath
+                    touched += dest.absolutePath
+                }
+            }
+            if (touched.isNotEmpty()) {
+                val latch = java.util.concurrent.CountDownLatch(touched.size)
+                MediaScannerConnection.scanFile(context, touched.toTypedArray(), null) { _, _ -> latch.countDown() }
+                latch.await(10, java.util.concurrent.TimeUnit.SECONDS)
+            }
+            moved
+        }
 
     /** Where a brand-new album folder is created. */
     fun newAlbumDir(name: String): String {
