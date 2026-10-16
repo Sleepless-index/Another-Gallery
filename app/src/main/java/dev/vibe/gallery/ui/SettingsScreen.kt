@@ -1,0 +1,447 @@
+package dev.vibe.gallery.ui
+
+import android.os.Build
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.graphics.ColorUtils
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.vibe.gallery.data.LayoutMode
+import dev.vibe.gallery.data.Prefs
+import dev.vibe.gallery.data.ThemeMode
+import dev.vibe.gallery.ui.theme.GIcons
+
+private val Presets = listOf(
+    "Lime" to Prefs.ACCENT_LIME,
+    "Blue" to Prefs.ACCENT_BLUE,
+    "Pink" to Prefs.ACCENT_PINK,
+    "White" to Prefs.ACCENT_WHITE,
+    "Sky" to Prefs.ACCENT_SKY,
+)
+
+@Composable
+private fun LayoutCard(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    preview: @Composable () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val border by animateColorAsState(if (selected) cs.primary else cs.outline, tween(220), label = "cardBorder")
+    val width by animateDpAsState(if (selected) 2.dp else 1.dp, tween(220), label = "cardBorderW")
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(cs.surface)
+            .border(BorderStroke(width, border), shape)
+            .bounceClick(role = Role.RadioButton, onClick = onClick)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(Modifier.fillMaxWidth().height(84.dp)) { preview() }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = cs.onBackground,
+                modifier = Modifier.weight(1f),
+            )
+            val pop by animateFloatAsState(
+                targetValue = if (selected) 1f else 0f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                label = "cardCheck",
+            )
+            Icon(
+                GIcons.Check, contentDescription = null, tint = cs.primary,
+                modifier = Modifier
+                    .size(18.dp)
+                    .scale(pop),
+            )
+        }
+    }
+}
+
+@Composable
+private fun GridPreview() {
+    val cs = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        repeat(2) {
+            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                repeat(3) {
+                    Box(Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(3.dp)).background(cs.outline))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MasonryPreview() {
+    val cs = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.weight(1f).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Box(Modifier.weight(3f).fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(cs.outline))
+            Box(Modifier.weight(2f).fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(cs.outline))
+        }
+        Column(Modifier.weight(1f).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Box(Modifier.weight(2f).fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(cs.outline))
+            Box(Modifier.weight(3f).fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(cs.outline))
+        }
+    }
+}
+
+@Composable
+private fun CardGroup(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        modifier = modifier
+            .padding(horizontal = 16.dp)
+            .fillMaxWidth()
+            .clip(shape)
+            .background(cs.surface)
+            .border(BorderStroke(1.dp, cs.outline), shape),
+    ) { content() }
+}
+
+@Composable
+private fun ToggleRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground, modifier = Modifier.weight(1f))
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = cs.onPrimary,
+                checkedTrackColor = cs.primary,
+                checkedBorderColor = Color.Transparent,
+                uncheckedThumbColor = cs.onSurfaceVariant,
+                uncheckedTrackColor = cs.surfaceVariant,
+                uncheckedBorderColor = Color.Transparent,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun Swatch(color: Color, selected: Boolean, label: String, content: @Composable () -> Unit = {}, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val ring by animateColorAsState(if (selected) cs.onBackground else Color.Transparent, tween(200), label = "swatchRing")
+    val pop by animateFloatAsState(
+        targetValue = if (selected) 1.1f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "swatchPop",
+    )
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .scale(pop)
+            .border(2.dp, ring, CircleShape)
+            .padding(5.dp)
+            .clip(CircleShape)
+            .background(color)
+            .bounceClick(role = Role.RadioButton, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { content() }
+}
+
+@Composable
+private fun CustomColorDialog(initial: Int, onDismiss: () -> Unit, onApply: (Int) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val start = remember {
+        val hsl = FloatArray(3)
+        ColorUtils.colorToHSL(initial, hsl)
+        hsl
+    }
+    var hue by remember { mutableFloatStateOf(start[0]) }
+    var sat by remember { mutableFloatStateOf(start[1]) }
+    var light by remember { mutableFloatStateOf(start[2].coerceIn(0.35f, 0.85f)) }
+    val argb = ColorUtils.HSLToColor(floatArrayOf(hue, sat, light))
+    val sliderColors = SliderDefaults.colors(
+        thumbColor = Color(argb),
+        activeTrackColor = Color(argb),
+        inactiveTrackColor = cs.surfaceVariant,
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = cs.surface,
+        titleContentColor = cs.onBackground,
+        textContentColor = cs.onBackground,
+        title = { Text("Custom accent", fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(argb))
+                )
+                Text("Hue", fontSize = 12.sp, color = cs.onSurfaceVariant)
+                Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f, colors = sliderColors)
+                Text("Saturation", fontSize = 12.sp, color = cs.onSurfaceVariant)
+                Slider(value = sat, onValueChange = { sat = it }, valueRange = 0f..1f, colors = sliderColors)
+                Text("Brightness", fontSize = 12.sp, color = cs.onSurfaceVariant)
+                Slider(value = light, onValueChange = { light = it }, valueRange = 0.35f..0.85f, colors = sliderColors)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onApply(argb) }) {
+                Text("Apply", color = cs.primary, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = cs.onSurfaceVariant, fontWeight = FontWeight.Bold)
+            }
+        },
+    )
+}
+
+@Composable
+fun SettingsScreen(vm: GalleryViewModel) {
+    val prefs by vm.prefs.collectAsStateWithLifecycle()
+    val cs = MaterialTheme.colorScheme
+    var showCustom by remember { mutableStateOf(false) }
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val isPreset = Presets.any { it.second == prefs.accent }
+
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        ScreenHeader(title = "Settings", subtitle = "")
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 100.dp + navBottom),
+        ) {
+            SectionLabel("Layout")
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                LayoutCard(
+                    title = "Grid",
+                    selected = prefs.layout == LayoutMode.GRID,
+                    onClick = { vm.setLayout(LayoutMode.GRID) },
+                    modifier = Modifier.weight(1f),
+                ) { GridPreview() }
+                LayoutCard(
+                    title = "Masonry",
+                    selected = prefs.layout == LayoutMode.MASONRY,
+                    onClick = { vm.setLayout(LayoutMode.MASONRY) },
+                    modifier = Modifier.weight(1f),
+                ) { MasonryPreview() }
+            }
+
+            CardGroup(Modifier.padding(top = 10.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Grid columns", fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                        color = cs.onBackground, modifier = Modifier.weight(1f),
+                    )
+                    GIconButton(
+                        GIcons.Minus, "Fewer columns", onClick = { vm.setColumns(prefs.columns - 1) },
+                        size = 34.dp, tint = if (prefs.columns > 2) cs.onBackground else cs.onSurfaceVariant,
+                    )
+                    AnimatedContent(
+                        targetState = prefs.columns,
+                        transitionSpec = {
+                            val up = targetState > initialState
+                            val enter = slideInVertically(tween(180)) { if (up) -it else it } + fadeIn(tween(180))
+                            val exit = slideOutVertically(tween(180)) { if (up) it else -it } + fadeOut(tween(120))
+                            (enter togetherWith exit).using(SizeTransform(clip = false))
+                        },
+                        label = "columnCount",
+                        modifier = Modifier.padding(horizontal = 14.dp),
+                    ) { n ->
+                        Text("$n", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
+                    }
+                    GIconButton(
+                        GIcons.Plus, "More columns", onClick = { vm.setColumns(prefs.columns + 1) },
+                        size = 34.dp, tint = if (prefs.columns < 6) cs.onBackground else cs.onSurfaceVariant,
+                    )
+                }
+            }
+
+            SectionLabel("Accent color")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Presets.forEach { (name, argb) ->
+                    Swatch(
+                        color = Color(argb),
+                        selected = prefs.accent == argb,
+                        label = name,
+                        onClick = { vm.setAccent(argb) },
+                    )
+                }
+                Swatch(
+                    color = if (isPreset) cs.surfaceVariant else Color(prefs.accent),
+                    selected = !isPreset,
+                    label = "Custom",
+                    content = {
+                        if (isPreset) {
+                            Icon(GIcons.Plus, contentDescription = "Custom color", tint = cs.onBackground, modifier = Modifier.size(18.dp))
+                        }
+                    },
+                    onClick = { showCustom = true },
+                )
+            }
+
+            SectionLabel("Theme")
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(ThemeMode.AMOLED to "AMOLED", ThemeMode.DARK to "Dark", ThemeMode.LIGHT to "Light").forEach { (mode, label) ->
+                    ThemeChip(
+                        label = label,
+                        active = prefs.theme == mode,
+                        onClick = { vm.setTheme(mode) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            SectionLabel("Video")
+            CardGroup {
+                ToggleRow("Resume where you left off", prefs.resume) { vm.setResume(it) }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(cs.outline))
+                ToggleRow("Autoplay when opened", prefs.autoplay) { vm.setAutoplay(it) }
+            }
+
+            SectionLabel("About")
+            CardGroup {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Gallery", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground, modifier = Modifier.weight(1f))
+                    Text("v0.1.0", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant)
+                }
+                if (Build.VERSION.SDK_INT >= 30) {
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(cs.outline))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Deleted items", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground, modifier = Modifier.weight(1f))
+                        Text("Kept 30 days", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+
+    if (showCustom) {
+        CustomColorDialog(
+            initial = prefs.accent,
+            onDismiss = { showCustom = false },
+            onApply = {
+                vm.setAccent(it)
+                showCustom = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun ThemeChip(label: String, active: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val bg by animateColorAsState(if (active) cs.primary else cs.surface, tween(220), label = "themeChipBg")
+    val fg by animateColorAsState(if (active) cs.onPrimary else cs.onBackground, tween(220), label = "themeChipFg")
+    val line by animateColorAsState(if (active) cs.primary else cs.outline, tween(220), label = "themeChipLine")
+    Box(
+        modifier = modifier
+            .height(46.dp)
+            .clip(RoundedCornerShape(23.dp))
+            .background(bg)
+            .border(BorderStroke(1.dp, line), RoundedCornerShape(23.dp))
+            .bounceClick(role = Role.RadioButton, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = fg, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+    }
+}

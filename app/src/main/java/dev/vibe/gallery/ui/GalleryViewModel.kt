@@ -1,0 +1,199 @@
+package dev.vibe.gallery.ui
+
+import android.app.Application
+import android.net.Uri
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import dev.vibe.gallery.GalleryApp
+import dev.vibe.gallery.data.Album
+import dev.vibe.gallery.data.Entry
+import dev.vibe.gallery.data.FavoriteEntity
+import dev.vibe.gallery.data.LayoutMode
+import dev.vibe.gallery.data.MediaItem
+import dev.vibe.gallery.data.Prefs
+import dev.vibe.gallery.data.ResumeEntity
+import dev.vibe.gallery.data.ThemeMode
+import dev.vibe.gallery.data.buildAlbums
+import dev.vibe.gallery.data.buildEntries
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+/** One-off requests the Activity has to carry out (they need system dialogs). */
+sealed interface UiEvent {
+    data class Trash(val uris: List<Uri>) : UiEvent
+    data class Restore(val uris: List<Uri>) : UiEvent
+    data class DeleteForever(val uris: List<Uri>) : UiEvent
+    data class Message(val text: String) : UiEvent
+}
+
+class GalleryViewModel(app: Application) : AndroidViewModel(app) {
+
+    private val g = app as GalleryApp
+    private val repo = g.repository
+    private val dao = g.db.dao()
+
+    // ---- settings -------------------------------------------------------
+    val prefs: StateFlow<Prefs> =
+        g.settings.flow.stateIn(viewModelScope, SharingStarted.Eagerly, Prefs())
+
+    fun setLayout(v: LayoutMode) = viewModelScope.launch { g.settings.setLayout(v) }
+    fun setColumns(v: Int) = viewModelScope.launch { g.settings.setColumns(v) }
+    fun setTheme(v: ThemeMode) = viewModelScope.launch { g.settings.setTheme(v) }
+    fun setAccent(v: Int) = viewModelScope.launch { g.settings.setAccent(v) }
+    fun setResume(v: Boolean) = viewModelScope.launch { g.settings.setResume(v) }
+    fun setAutoplay(v: Boolean) = viewModelScope.launch { g.settings.setAutoplay(v) }
+
+    // ---- media ----------------------------------------------------------
+    val items: StateFlow<List<MediaItem>> = repo.items
+    val loaded: StateFlow<Boolean> = repo.loaded
+
+    val photoEntries: StateFlow<List<Entry>> = items
+        .map { buildEntries(it) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val albums: StateFlow<List<Album>> = items
+        .map { buildAlbums(it) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val videos: StateFlow<List<MediaItem>> = items
+        .map { list -> list.filter { it.isVideo } }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val favorites: StateFlow<Set<Long>> = dao.observeFavoriteIds()
+        .map { it.toHashSet() as Set<Long> }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    val favoriteItems: StateFlow<List<MediaItem>> = combine(items, favorites) { list, favs ->
+        list.filter { it.id in favs }
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    private val _trashed = MutableStateFlow<List<MediaItem>>(emptyList())
+    val trashed: StateFlow<List<MediaItem>> = _trashed
+
+    fun refresh() {
+        viewModelScope.launch {
+            repo.refresh()
+            _trashed.value = repo.queryTrashed()
+        }
+    }
+
+    fun loadTrash() {
+        viewModelScope.launch { _trashed.value = repo.queryTrashed() }
+    }
+
+    fun startObserving() = repo.startObserving(viewModelScope)
+
+    // ---- selection ------------------------------------------------------
+    val selectMode = MutableStateFlow(false)
+    val selected = MutableStateFlow<Set<Long>>(emptySet())
+
+    fun startSelect() {
+        selectMode.value = true
+    }
+
+    fun toggle(id: Long) {
+        val cur = selected.value
+        val next = if (id in cur) cur - id else cur + id
+        selected.value = next
+        selectMode.value = next.isNotEmpty()
+    }
+
+    fun selectAll(ids: Collection<Long>) {
+        selected.value = ids.toHashSet()
+        selectMode.value = ids.isNotEmpty()
+    }
+
+    fun clearSelection() {
+        selected.value = emptySet()
+        selectMode.value = false
+    }
+
+    // ---- viewer ---------------------------------------------------------
+    private val _viewerList = MutableStateFlow<List<MediaItem>>(emptyList())
+    val viewerList: StateFlow<List<MediaItem>> = _viewerList
+
+    fun setViewerList(list: List<MediaItem>) {
+        _viewerList.value = list
+    }
+
+    fun findItem(id: Long): MediaItem? =
+        _viewerList.value.firstOrNull { it.id == id }
+            ?: items.value.firstOrNull { it.id == id }
+            ?: _trashed.value.firstOrNull { it.id == id }
+
+    // ---- favorites ------------------------------------------------------
+    fun toggleFavorite(ids: Collection<Long>) {
+        if (ids.isEmpty()) return
+        val favs = favorites.value
+        val allFav = ids.all { it in favs }
+        viewModelScope.launch(Dispatchers.IO) {
+            if (allFav) {
+                ids.chunked(500).forEach { dao.removeFavorites(it) }
+            } else {
+                dao.addFavorites(ids.map { FavoriteEntity(it) })
+            }
+        }
+    }
+
+    // ---- delete / trash -------------------------------------------------
+    private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 8)
+    val events: SharedFlow<UiEvent> = _events
+
+    private var pendingIds: List<Long> = emptyList()
+
+    fun requestTrash(list: List<MediaItem>) {
+        if (list.isEmpty()) return
+        pendingIds = list.map { it.id }
+        _events.tryEmit(UiEvent.Trash(list.map { it.uri }))
+    }
+
+    fun requestRestore(list: List<MediaItem>) {
+        if (list.isEmpty()) return
+        pendingIds = list.map { it.id }
+        _events.tryEmit(UiEvent.Restore(list.map { it.uri }))
+    }
+
+    fun requestDeleteForever(list: List<MediaItem>) {
+        if (list.isEmpty()) return
+        pendingIds = list.map { it.id }
+        _events.tryEmit(UiEvent.DeleteForever(list.map { it.uri }))
+    }
+
+    fun onSystemDialogResult(ok: Boolean) {
+        if (ok) {
+            val gone = pendingIds.toHashSet()
+            _viewerList.value = _viewerList.value.filter { it.id !in gone }
+            clearSelection()
+            refresh()
+        }
+        pendingIds = emptyList()
+    }
+
+    // ---- video resume ---------------------------------------------------
+    suspend fun resumePosition(id: Long): Long? = dao.resumePosition(id)
+
+    fun saveResume(id: Long, positionMs: Long, durationMs: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val nearEnd = durationMs > 0 && positionMs > durationMs - 4000
+            if (positionMs < 3000 || nearEnd) dao.clearResume(id) else dao.saveResume(ResumeEntity(id, positionMs))
+        }
+    }
+
+    fun message(text: String) {
+        _events.tryEmit(UiEvent.Message(text))
+    }
+}
