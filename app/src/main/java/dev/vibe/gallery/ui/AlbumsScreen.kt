@@ -96,6 +96,9 @@ private fun SmartTile(icon: ImageVector, title: String, count: String, tint: Col
     }
 }
 
+/** The Recent album shows this many of the newest items. */
+const val RecentLimit = 200
+
 @Composable
 fun AlbumsScreen(
     vm: GalleryViewModel,
@@ -104,6 +107,7 @@ fun AlbumsScreen(
 ) {
     val albums by vm.albums.collectAsStateWithLifecycle()
     val favorites by vm.favoriteItems.collectAsStateWithLifecycle()
+    val allItems by vm.items.collectAsStateWithLifecycle()
     val videos by vm.videos.collectAsStateWithLifecycle()
     val trashed by vm.trashed.collectAsStateWithLifecycle()
     val cs = MaterialTheme.colorScheme
@@ -121,15 +125,22 @@ fun AlbumsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            item(key = "smart_fav") {
+            item(key = "smart_recent") {
                 StaggerIn(0) {
-                    SmartTile(GIcons.HeartFilled, "Favorites", "%,d".format(favorites.size), cs.primary) {
+                    SmartTile(GIcons.Photos, "Recent", "%,d".format(minOf(allItems.size, RecentLimit)), cs.primary) {
+                        onOpenSmart("recent")
+                    }
+                }
+            }
+            item(key = "smart_fav") {
+                StaggerIn(1) {
+                    SmartTile(GIcons.HeartFilled, "Favorites", "%,d".format(favorites.size), HeartRed) {
                         onOpenSmart("favorites")
                     }
                 }
             }
             item(key = "smart_videos") {
-                StaggerIn(1) {
+                StaggerIn(2) {
                     SmartTile(GIcons.VideoAlbum, "Videos", "%,d".format(videos.size), cs.onBackground) {
                         onOpenSmart("videos")
                     }
@@ -137,7 +148,7 @@ fun AlbumsScreen(
             }
             if (Build.VERSION.SDK_INT >= 30) {
                 item(key = "smart_trash") {
-                    StaggerIn(2) {
+                    StaggerIn(3) {
                         SmartTile(GIcons.Trash, "Trash", "%,d".format(trashed.size), cs.onBackground) {
                             onOpenSmart("trash")
                         }
@@ -154,7 +165,7 @@ fun AlbumsScreen(
                 )
             }
             itemsIndexed(albums, key = { _, a -> "album_${a.bucketId}" }) { index, album ->
-                StaggerIn(index + 3) {
+                StaggerIn(index + 4) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -162,7 +173,7 @@ fun AlbumsScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         val request = remember(album.cover.uri) {
-                            ImageRequest.Builder(ctx).data(album.cover.uri).size(420).build()
+                            dev.vibe.gallery.data.thumbRequest(ctx, album.cover.uri, 420)
                         }
                         AsyncImage(
                             model = request,

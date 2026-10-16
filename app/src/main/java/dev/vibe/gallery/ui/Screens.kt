@@ -58,6 +58,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.vibe.gallery.data.Entry
 import dev.vibe.gallery.data.LayoutMode
 import dev.vibe.gallery.data.MediaItem
 import dev.vibe.gallery.data.buildEntries
@@ -126,7 +127,7 @@ fun PhotosScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit) {
                             Box {
                                 GIconButton(GIcons.More, "More options", onClick = { menu = true })
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                    DropdownMenuItem(
+                                    CompactMenuItem(
                                         text = {
                                             Text(if (prefs.layout == LayoutMode.GRID) "Masonry layout" else "Grid layout")
                                         },
@@ -137,7 +138,7 @@ fun PhotosScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit) {
                                             )
                                         },
                                     )
-                                    DropdownMenuItem(
+                                    CompactMenuItem(
                                         text = { Text("Refresh") },
                                         onClick = {
                                             menu = false
@@ -187,12 +188,16 @@ fun CollectionScreen(
     trash: Boolean,
     onBack: () -> Unit,
     onOpen: (List<MediaItem>, Int) -> Unit,
+    flat: Boolean = false,
 ) {
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     val favs by vm.favorites.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
     val selectMode by vm.selectMode.collectAsStateWithLifecycle()
-    val entries = remember(items) { buildEntries(items) }
+    val entries = remember(items, flat) {
+        // "flat" = one continuous grid with no date headers (the Recent album)
+        if (flat) items.map { Entry.Media(it) } else buildEntries(items)
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -469,7 +470,7 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
             label = "editorTab",
             modifier = Modifier
                 .fillMaxWidth()
-                .height(190.dp),
+                .heightIn(min = 190.dp),
         ) { current ->
             when (current) {
                 0 -> Column(
@@ -522,7 +523,7 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                     AdjustSlider("Warmth", warmth, -1f..1f, "%+.0f".format(warmth * 100)) { warmth = it }
                 }
                 else -> LazyRow(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxWidth(),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {

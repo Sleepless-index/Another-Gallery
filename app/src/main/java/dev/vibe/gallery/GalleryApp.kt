@@ -28,15 +28,17 @@ class GalleryApp : Application(), ImageLoaderFactory {
         repository = MediaRepository(this)
     }
 
-    override fun newImageLoader(): ImageLoader =
-        ImageLoader.Builder(this)
+    override fun newImageLoader(): ImageLoader {
+        val app = this
+        return ImageLoader.Builder(this)
             .components {
+                add(dev.vibe.gallery.data.MediaThumbFetcher.Factory(app))
                 add(VideoFrameDecoder.Factory())
                 add(ImageDecoderDecoder.Factory())
             }
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.30)
+                    .maxSizePercent(0.40)
                     .build()
             }
             .diskCache {
@@ -47,4 +49,5 @@ class GalleryApp : Application(), ImageLoaderFactory {
             }
             .crossfade(140)
             .build()
+    }
 }

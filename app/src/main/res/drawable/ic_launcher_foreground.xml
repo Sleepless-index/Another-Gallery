@@ -4,19 +4,29 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:pathData="M38,38 h32 a6,6 0 0 1 6,6 v20 a6,6 0 0 1 -6,6 h-32 a6,6 0 0 1 -6,-6 v-20 a6,6 0 0 1 6,-6 z"
-        android:strokeWidth="3.5"
-        android:strokeColor="#D4FF3A"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
-    <path
-        android:pathData="M32,64 L46,52 L56,61 L62,56 L76,68"
-        android:strokeWidth="3.5"
-        android:strokeColor="#D4FF3A"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
-    <path
-        android:fillColor="#D4FF3A"
-        android:pathData="M64,45 m-3.5,0 a3.5,3.5 0 1,0 7,0 a3.5,3.5 0 1,0 -7,0" />
+    <group android:translateY="5">
+        <!-- cloud: base + overlapping bumps -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M36,54 H72 A8,8 0 0 1 72,70 H36 A8,8 0 0 1 36,54 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M28,58 A10,10 0 1 0 48,58 A10,10 0 1 0 28,58 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M33,48 A13,13 0 1 0 59,48 A13,13 0 1 0 33,48 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M44,44 A16,16 0 1 0 76,44 A16,16 0 1 0 44,44 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M61,58 A11,11 0 1 0 83,58 A11,11 0 1 0 61,58 Z" />
+        <!-- window -->
+        <path
+            android:fillColor="#4C8DFF"
+            android:pathData="M48,46 H66 A3,3 0 0 1 69,49 V65 A3,3 0 0 1 66,68 H48 A3,3 0 0 1 45,65 V49 A3,3 0 0 1 48,46 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M56,46 H58 V68 H56 Z M45,56 H69 V58 H45 Z" />
+    </group>
 </vector>
