@@ -3,7 +3,6 @@ package dev.vibe.gallery.ui
 import androidx.compose.animation.AnimatedContent
 import dev.vibe.gallery.data.thumbRequest
 import androidx.compose.foundation.shape.CircleShape
-import dev.vibe.gallery.data.reorderForMasonry
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.runtime.derivedStateOf
