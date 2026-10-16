@@ -96,6 +96,48 @@ private fun SmartTile(icon: ImageVector, title: String, count: String, tint: Col
     }
 }
 
+@Composable
+private fun AlbumTile(name: String, count: Int, cover: dev.vibe.gallery.data.MediaItem, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val ctx = LocalContext.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .bounceClick(onClick = onClick),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        val request = remember(cover.uri) {
+            dev.vibe.gallery.data.thumbRequest(ctx, cover.uri, 480, cover.isVideo)
+        }
+        AsyncImage(
+            model = request,
+            contentDescription = name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(20.dp))
+                .background(cs.surfaceVariant),
+        )
+        Column(Modifier.padding(horizontal = 4.dp)) {
+            Text(
+                text = name,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = cs.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "%,d items".format(count),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = cs.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 /** The Recent album shows this many of the newest items. */
 const val RecentLimit = 200
 
@@ -104,7 +146,9 @@ fun AlbumsScreen(
     vm: GalleryViewModel,
     onOpenAlbum: (Long) -> Unit,
     onOpenSmart: (String) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
+    var menu by remember { mutableStateOf(false) }
     val albums by vm.albums.collectAsStateWithLifecycle()
     val favorites by vm.favoriteItems.collectAsStateWithLifecycle()
     val allItems by vm.items.collectAsStateWithLifecycle()
@@ -117,7 +161,31 @@ fun AlbumsScreen(
     LaunchedEffect(Unit) { vm.loadTrash() }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        ScreenHeader(title = "Albums", subtitle = "${albums.size} folders")
+        ScreenHeader(
+            title = "Albums",
+            subtitle = "${albums.size} folders",
+            trailing = {
+                Box {
+                    GIconButton(GIcons.More, "More options", onClick = { menu = true })
+                    androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        CompactMenuItem(
+                            text = { Text("Refresh") },
+                            onClick = {
+                                menu = false
+                                vm.refresh()
+                            },
+                        )
+                        CompactMenuItem(
+                            text = { Text("Settings") },
+                            onClick = {
+                                menu = false
+                                onOpenSettings()
+                            },
+                        )
+                    }
+                }
+            },
+        )
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 100.dp + navBottom),
@@ -125,22 +193,15 @@ fun AlbumsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            item(key = "smart_recent") {
-                StaggerIn(0) {
-                    SmartTile(GIcons.Photos, "Recent", "%,d".format(minOf(allItems.size, RecentLimit)), cs.primary) {
-                        onOpenSmart("recent")
-                    }
-                }
-            }
             item(key = "smart_fav") {
-                StaggerIn(1) {
+                StaggerIn(0) {
                     SmartTile(GIcons.HeartFilled, "Favorites", "%,d".format(favorites.size), HeartRed) {
                         onOpenSmart("favorites")
                     }
                 }
             }
             item(key = "smart_videos") {
-                StaggerIn(2) {
+                StaggerIn(1) {
                     SmartTile(GIcons.VideoAlbum, "Videos", "%,d".format(videos.size), cs.onBackground) {
                         onOpenSmart("videos")
                     }
@@ -148,7 +209,7 @@ fun AlbumsScreen(
             }
             if (Build.VERSION.SDK_INT >= 30) {
                 item(key = "smart_trash") {
-                    StaggerIn(3) {
+                    StaggerIn(2) {
                         SmartTile(GIcons.Trash, "Trash", "%,d".format(trashed.size), cs.onBackground) {
                             onOpenSmart("trash")
                         }
@@ -164,44 +225,26 @@ fun AlbumsScreen(
                     modifier = Modifier.padding(start = 4.dp, top = 10.dp),
                 )
             }
+            if (allItems.isNotEmpty()) {
+                item(key = "album_recent") {
+                    StaggerIn(3) {
+                        AlbumTile(
+                            name = "Recent",
+                            count = minOf(allItems.size, RecentLimit),
+                            cover = allItems.first(),
+                            onClick = { onOpenSmart("recent") },
+                        )
+                    }
+                }
+            }
             itemsIndexed(albums, key = { _, a -> "album_${a.bucketId}" }) { index, album ->
                 StaggerIn(index + 4) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .bounceClick(onClick = { onOpenAlbum(album.bucketId) }),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        val request = remember(album.cover.uri) {
-                            dev.vibe.gallery.data.thumbRequest(ctx, album.cover.uri, 480, album.cover.isVideo)
-                        }
-                        AsyncImage(
-                            model = request,
-                            contentDescription = album.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(1f)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(cs.surfaceVariant),
-                        )
-                        Column(Modifier.padding(horizontal = 4.dp)) {
-                            Text(
-                                text = album.name,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = cs.onBackground,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = "%,d items".format(album.count),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = cs.onSurfaceVariant,
-                            )
-                        }
-                    }
+                    AlbumTile(
+                        name = album.name,
+                        count = album.count,
+                        cover = album.cover,
+                        onClick = { onOpenAlbum(album.bucketId) },
+                    )
                 }
             }
         }

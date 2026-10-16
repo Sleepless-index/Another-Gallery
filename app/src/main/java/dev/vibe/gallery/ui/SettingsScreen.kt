@@ -75,11 +75,7 @@ import dev.vibe.gallery.data.ThemeMode
 import dev.vibe.gallery.ui.theme.GIcons
 
 private val Presets = listOf(
-    "Blue" to Prefs.ACCENT_BLUE,
-    "Lime" to Prefs.ACCENT_LIME,
-    "Pink" to Prefs.ACCENT_PINK,
-    "White" to Prefs.ACCENT_WHITE,
-    "Sky" to Prefs.ACCENT_SKY,
+    "Default" to Prefs.ACCENT_BLUE,
 )
 
 @Composable
@@ -375,7 +371,7 @@ private fun CustomColorDialog(initial: Int, onDismiss: () -> Unit, onApply: (Int
 private fun hexOf(c: Color): String = "#%06X".format(c.toArgb() and 0xFFFFFF)
 
 @Composable
-fun SettingsScreen(vm: GalleryViewModel) {
+fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit) {
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     val cs = MaterialTheme.colorScheme
     var showCustom by remember { mutableStateOf(false) }
@@ -383,7 +379,14 @@ fun SettingsScreen(vm: GalleryViewModel) {
     val isPreset = Presets.any { it.second == prefs.accent }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
-        ScreenHeader(title = "Settings", subtitle = "")
+        ScreenHeader(
+            title = "Settings",
+            subtitle = "",
+            leading = {
+                GIconButton(GIcons.Back, "Back", onClick = onBack)
+                Box(Modifier.size(12.dp))
+            },
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -450,7 +453,7 @@ fun SettingsScreen(vm: GalleryViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Presets.forEach { (name, argb) ->
