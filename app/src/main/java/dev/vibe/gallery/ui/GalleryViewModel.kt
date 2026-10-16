@@ -125,6 +125,10 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         selectMode.value = next.isNotEmpty()
     }
 
+    fun deselectAll() {
+        selected.value = emptySet()
+    }
+
     fun selectAll(ids: Collection<Long>) {
         selected.value = ids.toHashSet()
         selectMode.value = ids.isNotEmpty()

@@ -84,12 +84,13 @@ fun GIconButton(
     size: Dp = 44.dp,
     container: Color = MaterialTheme.colorScheme.surfaceVariant,
     tint: Color = MaterialTheme.colorScheme.onBackground,
+    flat: Boolean = false,
 ) {
     Box(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(container)
+            .background(if (flat) Color.Transparent else container)
             .bounceClick(onClick = onClick)
             .semantics { contentDescription = desc },
         contentAlignment = Alignment.Center,
@@ -142,6 +143,8 @@ fun SelectionHeader(
     count: Int,
     onSelectAll: () -> Unit,
     onCancel: () -> Unit,
+    allSelected: Boolean = false,
+    onDeselectAll: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -162,13 +165,13 @@ fun SelectionHeader(
                 .padding(start = 14.dp),
         )
         Text(
-            text = "Select all",
+            text = if (allSelected) "Deselect all" else "Select all",
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier
                 .clip(RoundedCornerShape(20.dp))
-                .bounceClick(onClick = onSelectAll)
+                .bounceClick(onClick = { if (allSelected) onDeselectAll() else onSelectAll() })
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         )
     }

@@ -167,7 +167,7 @@ fun AlbumsScreen(
             subtitle = "${albums.size} folders",
             trailing = {
                 Box {
-                    GIconButton(GIcons.More, "More options", onClick = { menu = true })
+                    GIconButton(GIcons.More, "More options", onClick = { menu = true }, flat = true)
                     androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         CompactMenuItem(
                             text = { Text("Refresh") },
