@@ -42,9 +42,16 @@ class MainActivity : FragmentActivity() {
     /** Android 10 only: files we must delete one by one, asking permission for each. */
     private val legacyDeleteQueue = ArrayDeque<Uri>()
 
+    private var pendingRename: UiEvent.Rename? = null
+
     private val intentSenderLauncher =
         registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
             val ok = result.resultCode == RESULT_OK
+            pendingRename?.let { r ->
+                pendingRename = null
+                if (ok) applyRename(r)
+                return@registerForActivityResult
+            }
             if (Build.VERSION.SDK_INT < 30 && legacyDeleteQueue.isNotEmpty()) {
                 if (ok) {
                     processLegacyDeletes()
@@ -182,8 +189,35 @@ class MainActivity : FragmentActivity() {
             is UiEvent.Trash -> trash(event.uris, true)
             is UiEvent.Restore -> trash(event.uris, false)
             is UiEvent.DeleteForever -> deleteForever(event.uris)
+            is UiEvent.Rename -> rename(event)
             is UiEvent.Message -> Toast.makeText(this, event.text, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun applyRename(r: UiEvent.Rename): Boolean = try {
+        val v = ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, r.name) }
+        val n = contentResolver.update(r.uri, v, null, null)
+        if (n > 0) vm.onRenamed(r.id, r.name) else Toast.makeText(this, "Couldn't rename", Toast.LENGTH_SHORT).show()
+        n > 0
+    } catch (e: RecoverableSecurityException) {
+        pendingRename = r
+        launchSender(e.userAction.actionIntent.intentSender)
+        false
+    } catch (e: SecurityException) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            pendingRename = r
+            launchSender(MediaStore.createWriteRequest(contentResolver, listOf(r.uri)).intentSender)
+        } else {
+            Toast.makeText(this, "Couldn't rename", Toast.LENGTH_SHORT).show()
+        }
+        false
+    } catch (e: Exception) {
+        Toast.makeText(this, "Couldn't rename (name may already exist)", Toast.LENGTH_SHORT).show()
+        false
+    }
+
+    private fun rename(r: UiEvent.Rename) {
+        applyRename(r)
     }
 
     private fun launchSender(sender: android.content.IntentSender) {
