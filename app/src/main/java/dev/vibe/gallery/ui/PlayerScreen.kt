@@ -591,7 +591,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                             RoundChrome(GIcons.Subtitles, "Subtitles") { subsMenu = true }
                             DropdownMenu(expanded = subsMenu, onDismissRequest = { subsMenu = false }) {
                                 val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
-                                DropdownMenuItem(
+                                CompactMenuItem(
                                     text = { Text("Off") },
                                     onClick = {
                                         subsMenu = false
@@ -600,7 +600,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                                     },
                                 )
                                 textGroups.forEachIndexed { i, g ->
-                                    DropdownMenuItem(
+                                    CompactMenuItem(
                                         text = { Text(trackLabel(g, i, "Subtitle")) },
                                         onClick = {
                                             subsMenu = false
@@ -613,7 +613,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                                     )
                                 }
                                 if (textGroups.isEmpty()) {
-                                    DropdownMenuItem(text = { Text("No subtitles in this file") }, enabled = false, onClick = {})
+                                    CompactMenuItem(text = { Text("No subtitles in this file") }, enabled = false, onClick = {})
                                 }
                             }
                         }
@@ -729,7 +729,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                                     }
                                     DropdownMenu(expanded = speedMenu, onDismissRequest = { speedMenu = false }) {
                                         listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { s ->
-                                            DropdownMenuItem(
+                                            CompactMenuItem(
                                                 text = { Text("${s}x") },
                                                 onClick = {
                                                     speedMenu = false
@@ -749,7 +749,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                                     ) { audioMenu = true }
                                     DropdownMenu(expanded = audioMenu, onDismissRequest = { audioMenu = false }) {
                                         audioGroups.forEachIndexed { i, g ->
-                                            DropdownMenuItem(
+                                            CompactMenuItem(
                                                 text = { Text(trackLabel(g, i, "Audio")) },
                                                 onClick = {
                                                     audioMenu = false
@@ -761,7 +761,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                                             )
                                         }
                                         if (audioGroups.isEmpty()) {
-                                            DropdownMenuItem(text = { Text("No audio tracks") }, enabled = false, onClick = {})
+                                            CompactMenuItem(text = { Text("No audio tracks") }, enabled = false, onClick = {})
                                         }
                                     }
                                 }
