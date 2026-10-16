@@ -110,7 +110,6 @@ fun GalleryRoot(
                     onOpenSmart = { kind -> nav.navigate("smart/$kind") },
                     onOpenSettings = { nav.navigate("settings") },
                     onOpenVault = { nav.navigate("vault") },
-                    onOpenCleanup = { nav.navigate("cleanup") },
                 )
             }
             composable("search") { SearchScreen(vm, onOpen = openViewer) }
@@ -132,24 +131,6 @@ fun GalleryRoot(
                     onOpen = openViewer,
                 )
             }
-            composable(
-                route = "cleanup",
-                enterTransition = { slideInHorizontally(tween(300)) { it / 5 } + fadeIn(tween(300)) },
-                popExitTransition = { slideOutHorizontally(tween(260)) { it / 5 } + fadeOut(tween(220)) },
-            ) {
-                CleanupScreen(
-                    vm = vm,
-                    onBack = { nav.popBackStack() },
-                    onOpenDuplicates = { nav.navigate("duplicates") },
-                    onOpenSmart = { kind -> nav.navigate("smart/$kind") },
-                )
-            }
-            composable(
-                route = "duplicates",
-                enterTransition = { slideInHorizontally(tween(300)) { it / 5 } + fadeIn(tween(300)) },
-                popExitTransition = { slideOutHorizontally(tween(260)) { it / 5 } + fadeOut(tween(220)) },
-            ) { DuplicatesScreen(vm, onBack = { nav.popBackStack() }, onOpen = openViewer) }
-
             composable(
                 route = "album/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.LongType }),
@@ -186,16 +167,12 @@ fun GalleryRoot(
                     "recent" -> "Recent"
                     "videos" -> "Videos"
                     "trash" -> "Trash"
-                    "large" -> "Large files"
-                    "screenshots" -> "Screenshots"
                     else -> "Favorites"
                 }
                 val list = when (kind) {
                     "recent" -> allItems.take(RecentLimit)
                     "videos" -> videos
                     "trash" -> trashed
-                    "large" -> remember(allItems) { allItems.filter { it.sizeBytes >= LargeBytes }.sortedByDescending { it.sizeBytes } }
-                    "screenshots" -> remember(allItems) { allItems.filter { isScreenshot(it) } }
                     else -> favorites
                 }
                 CollectionScreen(
@@ -203,7 +180,7 @@ fun GalleryRoot(
                     title = title,
                     items = list,
                     trash = kind == "trash",
-                    flat = kind == "recent" || kind == "large" || kind == "screenshots",
+                    flat = kind == "recent",
                     onBack = { nav.popBackStack() },
                     onOpen = openViewer,
                 )

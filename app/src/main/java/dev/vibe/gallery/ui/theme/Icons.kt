@@ -94,6 +94,9 @@ object GIcons {
     val Lock: ImageVector by lazy {
         IconBuilder("Lock").s(rrect(5f, 11f, 14f, 9f, 2.5f)).s("M 8 11 V 8 a 4 4 0 0 1 8 0 v 3").build()
     }
+    val Unlock: ImageVector by lazy {
+        IconBuilder("Unlock").s(rrect(5f, 11f, 14f, 9f, 2.5f)).s("M 8 11 V 8 a 4 4 0 0 1 7.5 -1.5").build()
+    }
     val Info: ImageVector by lazy {
         IconBuilder("Info").s(circle(12f, 12f, 9f)).s("M 12 11 v 6 M 12 7.5 v 0.5").build()
     }

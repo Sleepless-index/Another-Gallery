@@ -13,7 +13,6 @@ enum class LayoutMode { GRID, MASONRY }
 
 enum class ThemeMode { AMOLED, DARK, LIGHT }
 
-enum class SortMode { DATE_DESC, DATE_ASC, NAME_ASC, NAME_DESC, SIZE_DESC }
 
 data class Prefs(
     val layout: LayoutMode = LayoutMode.GRID,
@@ -22,7 +21,6 @@ data class Prefs(
     val accent: Int = ACCENT_BLUE,
     val resume: Boolean = true,
     val autoplay: Boolean = true,
-    val sort: SortMode = SortMode.DATE_DESC,
 ) {
     companion object {
         const val ACCENT_LIME = 0xFFD4FF3A.toInt()
@@ -43,7 +41,6 @@ class SettingsStore(private val context: Context) {
     private val kAccent = intPreferencesKey("accent")
     private val kResume = booleanPreferencesKey("resume")
     private val kAutoplay = booleanPreferencesKey("autoplay")
-    private val kSort = stringPreferencesKey("sort")
 
     val flow: Flow<Prefs> = context.dataStore.data.map { p ->
         Prefs(
@@ -53,7 +50,6 @@ class SettingsStore(private val context: Context) {
             accent = p[kAccent] ?: Prefs.ACCENT_BLUE,
             resume = p[kResume] ?: true,
             autoplay = p[kAutoplay] ?: true,
-            sort = runCatching { SortMode.valueOf(p[kSort] ?: "DATE_DESC") }.getOrDefault(SortMode.DATE_DESC),
         )
     }
 
@@ -63,5 +59,4 @@ class SettingsStore(private val context: Context) {
     suspend fun setAccent(v: Int) { context.dataStore.edit { it[kAccent] = v } }
     suspend fun setResume(v: Boolean) { context.dataStore.edit { it[kResume] = v } }
     suspend fun setAutoplay(v: Boolean) { context.dataStore.edit { it[kAutoplay] = v } }
-    suspend fun setSort(v: SortMode) { context.dataStore.edit { it[kSort] = v.name } }
 }
