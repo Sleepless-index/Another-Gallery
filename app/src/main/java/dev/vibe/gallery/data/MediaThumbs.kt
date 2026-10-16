@@ -30,6 +30,8 @@ class MediaThumbFetcher(
         val h = options.size.height.pxOrElse { 512 }.coerceAtLeast(64)
         try {
             val bmp = context.contentResolver.loadThumbnail(uri, android.util.Size(w, h), null)
+            // Never show a blurry upscaled thumbnail: let Coil decode properly instead.
+            if (maxOf(bmp.width, bmp.height) < (maxOf(w, h) * 0.8f).toInt()) return@withContext null
             DrawableResult(
                 drawable = BitmapDrawable(context.resources, bmp),
                 isSampled = true,
@@ -50,9 +52,13 @@ class MediaThumbFetcher(
 }
 
 /** Request for a grid/cover thumbnail. */
-fun thumbRequest(context: Context, uri: Uri, px: Int): ImageRequest =
+fun thumbRequest(context: Context, uri: Uri, px: Int, video: Boolean = false): ImageRequest =
     ImageRequest.Builder(context)
         .data(uri)
         .size(px)
-        .setParameter("thumb", true)
+        .apply {
+            // The system thumbnail cache is only a win for video frames. Photos are decoded
+            // (down-sampled) directly so they stay sharp.
+            if (video) setParameter("thumb", true)
+        }
         .build()

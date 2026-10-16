@@ -153,7 +153,7 @@ fun MediaTile(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         val request = remember(item.uri, thumbPx) {
-            thumbRequest(ctx, item.uri, thumbPx)
+            thumbRequest(ctx, item.uri, thumbPx, item.isVideo)
         }
         AsyncImage(
             model = request,
@@ -249,109 +249,6 @@ fun DurationBadge(durationMs: Long, modifier: Modifier = Modifier) {
     }
 }
 
-/** Thin draggable scrollbar with a month bubble. Appears while scrolling, fades out after. */
-@Composable
-fun FastScroller(
-    totalCountProvider: () -> Int,
-    firstVisibleProvider: () -> Int,
-    scrollingProvider: () -> Boolean,
-    labelAt: (Int) -> String,
-    scrollTo: suspend (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var dragging by remember { mutableStateOf(false) }
-    var dragFraction by remember { mutableFloatStateOf(0f) }
-    var trackHeight by remember { mutableIntStateOf(0) }
-    val scope = rememberCoroutineScope()
-    val cs = MaterialTheme.colorScheme
-    // Read through derived state so only this small composable updates while the list scrolls.
-    val totalCount by remember { derivedStateOf(totalCountProvider) }
-    val firstVisibleIndex by remember { derivedStateOf(firstVisibleProvider) }
-    val isScrolling by remember { derivedStateOf(scrollingProvider) }
-
-    val visible = (isScrolling || dragging) && totalCount > 60
-    val alpha by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(if (visible) 120 else 700),
-        label = "fastScrollAlpha",
-    )
-    if (alpha <= 0.01f && !visible) return
-
-    val frac = if (dragging) {
-        dragFraction
-    } else if (totalCount > 1) {
-        (firstVisibleIndex.toFloat() / (totalCount - 1)).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
-    val thumbHeightPx = with(LocalDensity.current) { 48.dp.toPx() }
-    val thumbY = ((trackHeight - thumbHeightPx) * frac).roundToInt().coerceAtLeast(0)
-
-    val dragModifier = if (visible) {
-        Modifier.pointerInput(totalCount) {
-            detectVerticalDragGestures(
-                onDragStart = { start ->
-                    dragging = true
-                    dragFraction = (start.y / size.height).coerceIn(0f, 1f)
-                },
-                onDragEnd = { dragging = false },
-                onDragCancel = { dragging = false },
-                onVerticalDrag = { change, _ ->
-                    change.consume()
-                    dragFraction = (change.position.y / size.height).coerceIn(0f, 1f)
-                    val target = (dragFraction * (totalCount - 1)).roundToInt()
-                    scope.launch { scrollTo(target) }
-                },
-            )
-        }
-    } else {
-        Modifier
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .width(36.dp)
-            .alpha(alpha)
-            .onSizeChanged { trackHeight = it.height }
-            .then(dragModifier),
-    ) {
-        Box(
-            Modifier
-                .align(Alignment.TopEnd)
-                .offset { IntOffset(0, thumbY) }
-                .padding(end = 4.dp)
-                .size(width = 5.dp, height = 48.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(cs.primary)
-        )
-        AnimatedVisibility(
-            visible = dragging,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset { IntOffset(0, thumbY + (thumbHeightPx / 2f).roundToInt() - 14.dp.roundToPx()) }
-                .wrapContentWidth(Alignment.End, unbounded = true)
-                .padding(end = 18.dp),
-            enter = fadeIn(tween(100)) + scaleIn(tween(120), initialScale = 0.8f),
-            exit = fadeOut(tween(160)) + scaleOut(tween(160), targetScale = 0.8f),
-        ) {
-            val idx = (dragFraction * (totalCount - 1).coerceAtLeast(0)).roundToInt()
-            Text(
-                text = labelAt(idx),
-                maxLines = 1,
-                softWrap = false,
-                color = cs.onPrimary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(cs.primary)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-            )
-        }
-    }
-}
-
 @Composable
 fun MediaCollection(
     entries: List<Entry>,
@@ -383,11 +280,10 @@ fun MediaCollection(
     val masonryEntries = remember(entries) { entries.filterIsInstance<Entry.Media>() }
     val gridState = rememberLazyGridState()
     val staggeredState = rememberLazyStaggeredGridState()
-    val labelAt = remember(entries) { { idx: Int -> monthLabel(entries.getOrNull(idx)?.dateMs ?: 0L) } }
     val density = LocalDensity.current
     val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
-    val gridThumb = (screenWidthPx / columns).toInt().coerceIn(128, 512)
-    val masonryThumb = (screenWidthPx / 2f).toInt().coerceIn(200, 640)
+    val gridThumb = (screenWidthPx / columns * 1.15f).toInt().coerceIn(160, 640)
+    val masonryThumb = (screenWidthPx * 0.62f).toInt().coerceIn(320, 800)
 
     Box(modifier.fillMaxSize()) {
         AnimatedContent(
@@ -435,14 +331,6 @@ fun MediaCollection(
                             }
                         }
                     }
-                    FastScroller(
-                        totalCountProvider = { gridState.layoutInfo.totalItemsCount },
-                        firstVisibleProvider = { gridState.firstVisibleItemIndex },
-                        scrollingProvider = { gridState.isScrollInProgress },
-                        labelAt = labelAt,
-                        scrollTo = { gridState.scrollToItem(it) },
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(top = 8.dp, bottom = bottomPad),
-                    )
                 } else {
                     LazyVerticalStaggeredGrid(
                         state = staggeredState,
@@ -483,14 +371,6 @@ fun MediaCollection(
                             }
                         }
                     }
-                    FastScroller(
-                        totalCountProvider = { staggeredState.layoutInfo.totalItemsCount },
-                        firstVisibleProvider = { staggeredState.firstVisibleItemIndex },
-                        scrollingProvider = { staggeredState.isScrollInProgress },
-                        labelAt = labelAt,
-                        scrollTo = { staggeredState.scrollToItem(it) },
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(top = 8.dp, bottom = bottomPad),
-                    )
                 }
             }
         }
