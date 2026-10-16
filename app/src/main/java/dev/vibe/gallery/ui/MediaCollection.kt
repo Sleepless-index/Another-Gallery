@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.clickable
 import dev.vibe.gallery.data.thumbRequest
 import androidx.compose.foundation.shape.CircleShape
@@ -321,7 +322,7 @@ fun MediaCollection(
             // Plain taps are resolved here (tiles have no click handler of their own), so a
             // long-press + release can never be mistaken for a tap that would deselect.
             .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectTapGestures(onTap = { pos ->
+                detectTapGestures(onTap = { pos ->
                     val id = idAt(pos)
                     val item = id?.let { idToItem[it] }
                     if (item != null) currentOnClick(item)
