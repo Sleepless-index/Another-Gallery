@@ -68,8 +68,8 @@ import dev.vibe.gallery.data.ThemeMode
 import dev.vibe.gallery.ui.theme.GIcons
 
 private val Presets = listOf(
-    "Lime" to Prefs.ACCENT_LIME,
     "Blue" to Prefs.ACCENT_BLUE,
+    "Lime" to Prefs.ACCENT_LIME,
     "Pink" to Prefs.ACCENT_PINK,
     "White" to Prefs.ACCENT_WHITE,
     "Sky" to Prefs.ACCENT_SKY,
