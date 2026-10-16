@@ -379,7 +379,9 @@ fun MediaCollection(
         return
     }
 
-    val masonryEntries = remember(entries) { reorderForMasonry(entries) }
+    // Pinterest-style: one continuous feed. Date headers would force both columns to line up
+    // and leave gaps, so the masonry layout skips them.
+    val masonryEntries = remember(entries) { entries.filterIsInstance<Entry.Media>() }
     val gridState = rememberLazyGridState()
     val staggeredState = rememberLazyStaggeredGridState()
     val labelAt = remember(entries) { { idx: Int -> monthLabel(entries.getOrNull(idx)?.dateMs ?: 0L) } }
@@ -456,11 +458,7 @@ fun MediaCollection(
                             key = { it.key },
                             contentType = { it::class },
                             span = { e ->
-                                if (e is Entry.Header || (e is Entry.Media && e.item.aspect >= 1.15f)) {
-                                    StaggeredGridItemSpan.FullLine
-                                } else {
-                                    StaggeredGridItemSpan.SingleLane
-                                }
+                                StaggeredGridItemSpan.SingleLane
                             },
                         ) { e ->
                             when (e) {
@@ -475,7 +473,7 @@ fun MediaCollection(
                                     selectMode = selectMode,
                                     selected = e.item.id in selected,
                                     baseCorner = 16.dp,
-                                    thumbPx = if (e.item.aspect >= 1.15f) (masonryThumb * 2).coerceAtMost(1080) else masonryThumb,
+                                    thumbPx = masonryThumb,
                                     onClick = { onClick(e.item) },
                                     onLongClick = { onLongClick(e.item) },
                                     modifier = Modifier
