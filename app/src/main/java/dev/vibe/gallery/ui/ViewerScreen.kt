@@ -257,7 +257,7 @@ fun ViewerScreen(
                 if (inVault) {
                     PillBar {
                         PillItem(
-                            icon = GIcons.Restore, label = "Restore", selected = false,
+                            icon = GIcons.Unlock, label = "Unhide", selected = false,
                             onClick = { vm.vaultRestore(listOf(current)) },
                             modifier = Modifier.weight(1f),
                         )

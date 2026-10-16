@@ -228,9 +228,14 @@ private fun CropOverlay(
 
         val arm = 22.dp.toPx()
         val w = 4.dp.toPx()
+        // One continuous L per corner, centred exactly on the frame line: no overlapping strokes.
         fun corner(cx: Float, cy: Float, sx: Float, sy: Float) {
-            drawLine(accent, Offset(cx - w / 2 * sx, cy), Offset(cx + arm * sx, cy), strokeWidth = w, cap = StrokeCap.Round)
-            drawLine(accent, Offset(cx, cy - w / 2 * sy), Offset(cx, cy + arm * sy), strokeWidth = w, cap = StrokeCap.Round)
+            val p = Path().apply {
+                moveTo(cx + arm * sx, cy)
+                lineTo(cx, cy)
+                lineTo(cx, cy + arm * sy)
+            }
+            drawPath(p, accent, style = Stroke(width = w, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
         }
         corner(l, t, 1f, 1f)
         corner(r, t, -1f, 1f)

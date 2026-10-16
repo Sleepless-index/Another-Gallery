@@ -38,7 +38,7 @@ fun VaultSelectionBar(vm: GalleryViewModel, source: List<MediaItem>, modifier: M
     val has = selected.isNotEmpty()
     PillBar(modifier) {
         PillItem(
-            icon = GIcons.Restore, label = "Restore", selected = false,
+            icon = GIcons.Unlock, label = "Unhide", selected = false,
             onClick = { if (has) vm.vaultRestore(source.filter { it.id in selected }) },
             modifier = Modifier.weight(1f),
         )

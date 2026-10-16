@@ -479,23 +479,6 @@ fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit) {
                 )
             }
 
-            SectionLabel("Sort photos by")
-            Row(
-                modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                dev.vibe.gallery.data.SortMode.values().forEach { mode ->
-                    ThemeChip(
-                        label = sortLabel(mode),
-                        active = prefs.sort == mode,
-                        onClick = { vm.setSort(mode) },
-                        modifier = Modifier.width(112.dp),
-                    )
-                }
-            }
-
             SectionLabel("Theme")
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp),

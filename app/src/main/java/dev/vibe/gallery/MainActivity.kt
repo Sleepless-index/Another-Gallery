@@ -6,7 +6,11 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.content.ContentValues
+import android.content.Intent
+import android.os.Environment
 import android.provider.MediaStore
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -70,10 +74,40 @@ class MainActivity : FragmentActivity() {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
 
+    /** Asks once for "All files access" so moves and deletes work without extra prompts. */
+    private fun askAllFilesOnce() {
+        if (Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()) return
+        val sp = getSharedPreferences("gallery", MODE_PRIVATE)
+        if (sp.getBoolean("askedAllFiles", false)) return
+        sp.edit().putBoolean("askedAllFiles", true).apply()
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                    .setData(Uri.parse("package:$packageName"))
+            )
+        }
+    }
+
+    /** Trash / restore / delete directly when we have All files access. True if it worked. */
+    private fun direct(uris: List<Uri>, op: String): Boolean {
+        if (Build.VERSION.SDK_INT < 30 || !Environment.isExternalStorageManager()) return false
+        return runCatching {
+            uris.forEach { u ->
+                when (op) {
+                    "trash" -> contentResolver.update(u, ContentValues().apply { put(MediaStore.MediaColumns.IS_TRASHED, 1) }, null, null)
+                    "restore" -> contentResolver.update(u, ContentValues().apply { put(MediaStore.MediaColumns.IS_TRASHED, 0) }, null, null)
+                    else -> contentResolver.delete(u, null, null)
+                }
+            }
+            true
+        }.getOrDefault(false)
+    }
+
     private fun updatePermission() {
         val granted = hasMediaPermission()
         if (granted && !hasPermission.value) vm.refresh()
         hasPermission.value = granted
+        if (granted) askAllFilesOnce()
     }
 
     private fun requestPermissions() {
@@ -157,6 +191,10 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun trash(uris: List<Uri>, toTrash: Boolean) {
+        if (direct(uris, if (toTrash) "trash" else "restore")) {
+            vm.onSystemDialogResult(true)
+            return
+        }
         if (Build.VERSION.SDK_INT >= 30) {
             val pending = MediaStore.createTrashRequest(contentResolver, uris, toTrash)
             launchSender(pending.intentSender)
@@ -169,6 +207,10 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun deleteForever(uris: List<Uri>) {
+        if (direct(uris, "delete")) {
+            vm.onSystemDialogResult(true)
+            return
+        }
         if (Build.VERSION.SDK_INT >= 30) {
             val pending = MediaStore.createDeleteRequest(contentResolver, uris)
             launchSender(pending.intentSender)
