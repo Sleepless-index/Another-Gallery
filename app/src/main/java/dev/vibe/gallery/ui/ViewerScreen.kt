@@ -288,7 +288,7 @@ fun ViewerScreen(
                         )
                     } else {
                         PillItem(
-                            icon = GIcons.Settings, label = "Edit", selected = false,
+                            icon = GIcons.Edit, label = "Edit", selected = false,
                             onClick = { onEdit(current) },
                             modifier = Modifier.weight(1f),
                         )
@@ -304,7 +304,19 @@ fun ViewerScreen(
     }
 
     if (showInfo) {
-        InfoSheet(item = current, onDismiss = { showInfo = false })
+        InfoSheet(
+            item = current,
+            inVault = inVault,
+            onDismiss = { showInfo = false },
+            onShare = { shareItems(context, listOf(current)) },
+            onClipboard = { copyToClipboard(context, current) },
+            onHide = { vm.moveToVault(listOf(current)) },
+            onUseAs = { setAs(context, current) },
+            onCopy = { picker = false },
+            onMove = { picker = true },
+            onEdit = { onEdit(current) },
+            onPrint = { printImage(context, current) },
+        )
     }
     picker?.let { move ->
         AlbumPickerSheet(vm = vm, items = listOf(current), initialMove = move, onDismiss = { picker = null })
@@ -538,92 +550,3 @@ internal fun ZoomableImage(
         )
     }
 }
-
-// ---------------------------------------------------------------------------------------------
-// Details sheet
-// ---------------------------------------------------------------------------------------------
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun InfoSheet(item: MediaItem, onDismiss: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val context = LocalContext.current
-    val rows by produceState(initialValue = emptyList<Pair<String, String>>(), item.id) {
-        value = readInfo(context, item)
-    }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = cs.surface,
-        contentColor = cs.onBackground,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(GIcons.Info, contentDescription = null, tint = cs.primary, modifier = Modifier.size(22.dp))
-                Text("Details", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-            }
-            rows.forEach { (label, value) ->
-                Column {
-                    Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurfaceVariant)
-                    Text(value, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = cs.onBackground)
-                }
-            }
-        }
-    }
-}
-
-private fun openExif(context: Context, uri: android.net.Uri): ExifInterface? =
-    context.contentResolver.openInputStream(uri)?.use { ExifInterface(it) }
-
-private suspend fun readInfo(context: Context, item: MediaItem): List<Pair<String, String>> =
-    withContext(Dispatchers.IO) {
-        val rows = mutableListOf<Pair<String, String>>()
-        rows += "Name" to item.name
-        val dt = DateTimeFormatter.ofPattern("EEE, MMM d, yyyy  h:mm a", Locale.getDefault())
-            .format(Instant.ofEpochMilli(item.dateMs).atZone(ZoneId.systemDefault()))
-        rows += "Date" to dt
-        rows += "Size" to formatSize(item.sizeBytes)
-        if (item.width > 0 && item.height > 0) {
-            val mp = item.width.toLong() * item.height / 1_000_000.0
-            val res = "${item.width} x ${item.height}"
-            rows += "Resolution" to if (!item.isVideo && mp >= 0.1) "$res  (%.1f MP)".format(mp) else res
-        }
-        if (item.isVideo && item.durationMs > 0) rows += "Duration" to formatDuration(item.durationMs)
-        if (item.mime.isNotBlank()) rows += "Type" to item.mime
-        rows += "Location" to (item.relativePath + item.name)
-
-        if (!item.isVideo) {
-            val exif = runCatching { openExif(context, MediaStore.setRequireOriginal(item.uri)) }.getOrNull()
-                ?: runCatching { openExif(context, item.uri) }.getOrNull()
-            if (exif != null) {
-                val camera = listOfNotNull(
-                    exif.getAttribute(ExifInterface.TAG_MAKE),
-                    exif.getAttribute(ExifInterface.TAG_MODEL),
-                ).joinToString(" ").trim()
-                if (camera.isNotEmpty()) rows += "Camera" to camera
-                val parts = mutableListOf<String>()
-                exif.getAttribute(ExifInterface.TAG_F_NUMBER)?.let { parts += "f/$it" }
-                exif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME)?.toDoubleOrNull()?.let {
-                    parts += if (it < 1.0 && it > 0.0) "1/${(1.0 / it).toInt()}s" else "${it}s"
-                }
-                exif.getAttribute(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY)?.let { parts += "ISO $it" }
-                exif.getAttribute(ExifInterface.TAG_FOCAL_LENGTH)?.let { f ->
-                    val v = f.split("/").let { p ->
-                        if (p.size == 2) p[0].toDoubleOrNull()?.div(p[1].toDoubleOrNull() ?: 1.0) else f.toDoubleOrNull()
-                    }
-                    if (v != null) parts += "%.0f mm".format(v)
-                }
-                if (parts.isNotEmpty()) rows += "Exposure" to parts.joinToString("   ")
-                val ll = exif.latLong
-                if (ll != null) rows += "GPS" to "%.5f, %.5f".format(ll[0], ll[1])
-            }
-        }
-        rows
-    }

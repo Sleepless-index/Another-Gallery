@@ -94,6 +94,21 @@ object GIcons {
     val Lock: ImageVector by lazy {
         IconBuilder("Lock").s(rrect(5f, 11f, 14f, 9f, 2.5f)).s("M 8 11 V 8 a 4 4 0 0 1 8 0 v 3").build()
     }
+    val Edit: ImageVector by lazy {
+        IconBuilder("Edit").s("M 4 20 l 1 -4.2 L 16.2 4.6 a 2.2 2.2 0 0 1 3.1 3.1 L 8.1 18.9 z M 14.4 6.4 l 3.2 3.2").build()
+    }
+    val Copy: ImageVector by lazy {
+        IconBuilder("Copy").s(rrect(9f, 9f, 11f, 11f, 2.5f))
+            .s("M 15 9 V 6.5 A 2.5 2.5 0 0 0 12.5 4 h -6 A 2.5 2.5 0 0 0 4 6.5 v 6 A 2.5 2.5 0 0 0 6.5 15 H 9").build()
+    }
+    val Clipboard: ImageVector by lazy {
+        IconBuilder("Clipboard").s(rrect(5f, 5f, 14f, 16f, 2.5f)).s("M 9 3.5 h 6 v 3 H 9 z").build()
+    }
+    val Move: ImageVector by lazy {
+        IconBuilder("Move")
+            .s("M 3 7.5 A 2 2 0 0 1 5 5.5 h 4 l 2 2 h 8 a 2 2 0 0 1 2 2 v 8 a 2 2 0 0 1 -2 2 H 5 a 2 2 0 0 1 -2 -2 z")
+            .s("M 8.5 13.5 h 7 M 13 11 l 2.5 2.5 L 13 16").build()
+    }
     val Unlock: ImageVector by lazy {
         IconBuilder("Unlock").s(rrect(5f, 11f, 14f, 9f, 2.5f)).s("M 8 11 V 8 a 4 4 0 0 1 7.5 -1.5").build()
     }
