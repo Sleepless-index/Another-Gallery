@@ -255,7 +255,6 @@ val NavTabs = listOf(
     NavTab("photos", "Photos", GIcons.Photos),
     NavTab("albums", "Albums", GIcons.Albums),
     NavTab("search", "Search", GIcons.Search),
-    NavTab("settings", "Settings", GIcons.Settings),
 )
 
 @Composable
