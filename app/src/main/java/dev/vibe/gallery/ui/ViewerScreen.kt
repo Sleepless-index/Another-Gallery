@@ -65,6 +65,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -135,7 +136,8 @@ fun ViewerScreen(
     val insetTop by animateDpAsState(if (chrome) topBarH else 0.dp, tween(220), label = "insetTop")
     val insetBottom by animateDpAsState(if (chrome) bottomBarH else 0.dp, tween(220), label = "insetBottom")
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    val blurDp by animateDpAsState(if (showInfo) 28.dp else 0.dp, tween(260), label = "infoBlur")
+    Box(Modifier.fillMaxSize().background(Color.Black).blur(blurDp)) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
@@ -305,19 +307,7 @@ fun ViewerScreen(
     }
 
     if (showInfo) {
-        InfoSheet(
-            item = current,
-            inVault = inVault,
-            onDismiss = { showInfo = false },
-            onShare = { shareItems(context, listOf(current)) },
-            onClipboard = { copyToClipboard(context, current) },
-            onHide = { vm.moveToVault(listOf(current)) },
-            onUseAs = { setAs(context, current) },
-            onCopy = { picker = false },
-            onMove = { picker = true },
-            onEdit = { onEdit(current) },
-            onPrint = { printImage(context, current) },
-        )
+        InfoSheet(item = current, onDismiss = { showInfo = false }, onRename = { vm.rename(current, it) })
     }
     picker?.let { move ->
         AlbumPickerSheet(vm = vm, items = listOf(current), initialMove = move, onDismiss = { picker = null })
