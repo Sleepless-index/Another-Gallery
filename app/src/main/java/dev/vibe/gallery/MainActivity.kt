@@ -8,7 +8,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
@@ -16,7 +15,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
+import android.view.WindowManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -27,7 +30,7 @@ import dev.vibe.gallery.ui.UiEvent
 import dev.vibe.gallery.ui.theme.GalleryTheme
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private val vm: GalleryViewModel by viewModels()
     private val hasPermission = mutableStateOf(false)
@@ -96,9 +99,42 @@ class MainActivity : ComponentActivity() {
                     vm = vm,
                     hasPermission = hasPermission.value,
                     onRequestPermission = { requestPermissions() },
+                    onAuthenticate = { ok -> authenticate(ok) },
+                    onSecure = { secure ->
+                        if (secure) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    },
                 )
             }
         }
+    }
+
+    private fun authenticate(onSuccess: () -> Unit) {
+        val allowed = BiometricManager.Authenticators.BIOMETRIC_WEAK or
+            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        if (BiometricManager.from(this).canAuthenticate(allowed) != BiometricManager.BIOMETRIC_SUCCESS) {
+            Toast.makeText(this, "Set a screen lock to use the Vault", Toast.LENGTH_LONG).show()
+            return
+        }
+        val prompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    onSuccess()
+                }
+            },
+        )
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock Vault")
+            .setAllowedAuthenticators(allowed)
+            .build()
+        prompt.authenticate(info)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) vm.lockVault()
     }
 
     override fun onStart() {

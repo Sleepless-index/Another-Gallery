@@ -118,7 +118,10 @@ fun ViewerScreen(
     var chrome by remember { mutableStateOf(true) }
     var showInfo by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+    // null = closed, false = copy to album, true = move to album
+    var picker by remember { mutableStateOf<Boolean?>(null) }
     val context = LocalContext.current
+    val inVault = list[pagerState.currentPage.coerceIn(0, list.lastIndex)].id < 0
     val current = list[pagerState.currentPage.coerceIn(0, list.lastIndex)]
     val isFav = current.id in favs
 
@@ -200,6 +203,45 @@ fun ViewerScreen(
                                 showInfo = true
                             },
                         )
+                        if (!inVault) {
+                            if (!current.isVideo) {
+                                CompactMenuItem(
+                                    text = { Text("Set as…") },
+                                    onClick = {
+                                        menu = false
+                                        setAs(context, current)
+                                    },
+                                )
+                                CompactMenuItem(
+                                    text = { Text("Print") },
+                                    onClick = {
+                                        menu = false
+                                        printImage(context, current)
+                                    },
+                                )
+                            }
+                            CompactMenuItem(
+                                text = { Text("Copy to album…") },
+                                onClick = {
+                                    menu = false
+                                    picker = false
+                                },
+                            )
+                            CompactMenuItem(
+                                text = { Text("Move to album…") },
+                                onClick = {
+                                    menu = false
+                                    picker = true
+                                },
+                            )
+                            CompactMenuItem(
+                                text = { Text("Move to Vault") },
+                                onClick = {
+                                    menu = false
+                                    vm.moveToVault(listOf(current))
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -212,7 +254,20 @@ fun ViewerScreen(
             exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 2 },
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                PillBar {
+                if (inVault) {
+                    PillBar {
+                        PillItem(
+                            icon = GIcons.Restore, label = "Restore", selected = false,
+                            onClick = { vm.vaultRestore(listOf(current)) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        PillItem(
+                            icon = GIcons.Trash, label = "Delete", selected = false,
+                            onClick = { vm.vaultDelete(listOf(current)) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                } else PillBar {
                     PillItem(
                         icon = GIcons.Share, label = "Share", selected = false,
                         onClick = { dev.vibe.gallery.util.shareItems(context, listOf(current)) },
@@ -250,6 +305,24 @@ fun ViewerScreen(
 
     if (showInfo) {
         InfoSheet(item = current, onDismiss = { showInfo = false })
+    }
+    picker?.let { move ->
+        AlbumPickerSheet(vm = vm, items = listOf(current), initialMove = move, onDismiss = { picker = null })
+    }
+}
+
+private fun setAs(context: Context, item: MediaItem) {
+    val intent = android.content.Intent(android.content.Intent.ACTION_ATTACH_DATA)
+        .setDataAndType(item.uri, item.mime.ifBlank { "image/*" })
+        .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    runCatching { context.startActivity(android.content.Intent.createChooser(intent, "Set as")) }
+}
+
+private fun printImage(context: Context, item: MediaItem) {
+    runCatching {
+        androidx.print.PrintHelper(context).apply {
+            scaleMode = androidx.print.PrintHelper.SCALE_MODE_FIT
+        }.printBitmap(item.name.ifBlank { "Photo" }, item.uri)
     }
 }
 
@@ -304,7 +377,7 @@ private fun VideoPage(
 }
 
 @Composable
-private fun ZoomableImage(
+internal fun ZoomableImage(
     item: MediaItem,
     insetTop: Dp,
     insetBottom: Dp,
@@ -401,11 +474,14 @@ private fun ZoomableImage(
                                 twistRaw += r
                                 if (kotlin.math.abs(twistRaw) > 18f) {
                                     twisted = true
+                                    scale = 1f
+                                    offset = Offset.Zero
                                     rotation += twistRaw - (if (twistRaw > 0) 18f else -18f)
                                 }
                             }
                         }
-                        val newScale = (scale * zoom).coerceIn(1f, 6f)
+                        // Once the image is being twisted, zoom is locked so the rotation stays smooth.
+                        val newScale = if (twisted) scale else (scale * zoom).coerceIn(1f, 6f)
                         if (scale > 1f || newScale > 1f || multi) {
                             val maxX = box.width * (newScale - 1f) / 2f
                             val maxY = box.height * (newScale - 1f) / 2f

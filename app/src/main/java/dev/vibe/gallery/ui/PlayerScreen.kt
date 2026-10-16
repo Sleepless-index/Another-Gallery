@@ -270,7 +270,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
     }
 
     LaunchedEffect(Unit) {
-        if (prefs.resume) {
+        if (prefs.resume && item.id >= 0) {
             val saved = vm.resumePosition(item.id)
             if (saved != null && saved > 3000) player.seekTo(saved)
         }
@@ -340,7 +340,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
 
     DisposableEffect(Unit) {
         onDispose {
-            vm.saveResume(item.id, player.currentPosition, player.duration.coerceAtLeast(0))
+            if (item.id >= 0) vm.saveResume(item.id, player.currentPosition, player.duration.coerceAtLeast(0))
             player.release()
         }
     }

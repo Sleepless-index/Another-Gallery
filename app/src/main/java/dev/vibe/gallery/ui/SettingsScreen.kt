@@ -1,5 +1,7 @@
 package dev.vibe.gallery.ui
 
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Offset
@@ -475,6 +477,23 @@ fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit) {
                     },
                     onClick = { showCustom = true },
                 )
+            }
+
+            SectionLabel("Sort photos by")
+            Row(
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                dev.vibe.gallery.data.SortMode.values().forEach { mode ->
+                    ThemeChip(
+                        label = sortLabel(mode),
+                        active = prefs.sort == mode,
+                        onClick = { vm.setSort(mode) },
+                        modifier = Modifier.width(112.dp),
+                    )
+                }
             }
 
             SectionLabel("Theme")
