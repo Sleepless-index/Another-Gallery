@@ -116,10 +116,10 @@ private fun trackLabel(group: Tracks.Group, index: Int, prefix: String): String 
 }
 
 @Composable
-private fun PlayerChip(text: String, icon: ImageVector?, accent: Boolean = false, onClick: () -> Unit) {
+private fun PlayerChip(text: String, icon: ImageVector?, accent: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Row(
-        modifier = Modifier
+        modifier = modifier
             .height(36.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(PlayerChrome)
@@ -136,6 +136,8 @@ private fun PlayerChip(text: String, icon: ImageVector?, accent: Boolean = false
             color = if (accent) cs.primary else Color.White,
             fontSize = 12.sp,
             fontWeight = FontWeight.ExtraBold,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
     }
 }
@@ -714,7 +716,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                             Row(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .horizontalScroll(rememberScrollState()),
+                                    .padding(end = 8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 PlayerChip("Lock", GIcons.Lock) {
@@ -738,7 +740,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                                         }
                                     }
                                 }
-                                Box {
+                                Box(Modifier.weight(1f, fill = false)) {
                                     val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
                                     val selectedIdx = audioGroups.indexOfFirst { it.isSelected }
                                     PlayerChip(

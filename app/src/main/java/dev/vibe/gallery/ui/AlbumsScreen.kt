@@ -86,9 +86,12 @@ private fun SmartTile(icon: ImageVector, title: String, count: String, tint: Col
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-        Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = cs.onBackground)
-            Text(count, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = cs.onSurfaceVariant)
+            Text(count, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = cs.onSurfaceVariant)
         }
     }
 }
@@ -135,7 +138,7 @@ fun AlbumsScreen(
             if (Build.VERSION.SDK_INT >= 30) {
                 item(key = "smart_trash") {
                     StaggerIn(2) {
-                        SmartTile(GIcons.Trash, "Trash", "%,d · 30 days".format(trashed.size), cs.onBackground) {
+                        SmartTile(GIcons.Trash, "Trash", "%,d".format(trashed.size), cs.onBackground) {
                             onOpenSmart("trash")
                         }
                     }

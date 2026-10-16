@@ -432,7 +432,11 @@ fun MediaCollection(
                             key = { it.key },
                             contentType = { it::class },
                             span = { e ->
-                                if (e is Entry.Header) StaggeredGridItemSpan.FullLine else StaggeredGridItemSpan.SingleLane
+                                if (e is Entry.Header || (e is Entry.Media && e.item.aspect >= 1.15f)) {
+                                    StaggeredGridItemSpan.FullLine
+                                } else {
+                                    StaggeredGridItemSpan.SingleLane
+                                }
                             },
                         ) { e ->
                             when (e) {

@@ -17,7 +17,7 @@ data class Prefs(
     val layout: LayoutMode = LayoutMode.GRID,
     val columns: Int = 3,
     val theme: ThemeMode = ThemeMode.AMOLED,
-    val accent: Int = ACCENT_LIME,
+    val accent: Int = ACCENT_BLUE,
     val resume: Boolean = true,
     val autoplay: Boolean = true,
 ) {
@@ -46,7 +46,7 @@ class SettingsStore(private val context: Context) {
             layout = runCatching { LayoutMode.valueOf(p[kLayout] ?: "GRID") }.getOrDefault(LayoutMode.GRID),
             columns = (p[kColumns] ?: 3).coerceIn(2, 6),
             theme = runCatching { ThemeMode.valueOf(p[kTheme] ?: "AMOLED") }.getOrDefault(ThemeMode.AMOLED),
-            accent = p[kAccent] ?: Prefs.ACCENT_LIME,
+            accent = p[kAccent] ?: Prefs.ACCENT_BLUE,
             resume = p[kResume] ?: true,
             autoplay = p[kAutoplay] ?: true,
         )

@@ -14,6 +14,15 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.gestures.calculateRotation
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -116,6 +125,11 @@ fun ViewerScreen(
     val timeFmt = remember { DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault()) }
     val zoned = Instant.ofEpochMilli(current.dateMs).atZone(ZoneId.systemDefault())
 
+    val topBarH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 64.dp
+    val bottomBarH = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 18.dp + 64.dp + 12.dp
+    val insetTop by animateDpAsState(if (chrome) topBarH else 0.dp, tween(220), label = "insetTop")
+    val insetBottom by animateDpAsState(if (chrome) bottomBarH else 0.dp, tween(220), label = "insetBottom")
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         HorizontalPager(
             state = pagerState,
@@ -128,6 +142,8 @@ fun ViewerScreen(
             if (item.isVideo) {
                 VideoPage(
                     item = item,
+                    insetTop = insetTop,
+                    insetBottom = insetBottom,
                     onTap = { chrome = !chrome },
                     onPlay = { onPlay(item) },
                 )
@@ -135,7 +151,8 @@ fun ViewerScreen(
                 ZoomableImage(
                     item = item,
                     onTap = { chrome = !chrome },
-                    onSwipeUp = { showInfo = true },
+                    insetTop = insetTop,
+                    insetBottom = insetBottom,
                     onSwipeDown = onBack,
                 )
             }
@@ -194,19 +211,6 @@ fun ViewerScreen(
             exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 2 },
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "Swipe up for details",
-                    color = Color(0xFF8A8A8E),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) { showInfo = true }
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                )
                 PillBar {
                     PillItem(
                         icon = GIcons.Share, label = "Share", selected = false,
@@ -249,74 +253,111 @@ fun ViewerScreen(
 }
 
 @Composable
-private fun VideoPage(item: MediaItem, onTap: () -> Unit, onPlay: () -> Unit) {
+private fun VideoPage(
+    item: MediaItem,
+    insetTop: Dp,
+    insetBottom: Dp,
+    onTap: () -> Unit,
+    onPlay: () -> Unit,
+) {
     val ctx = LocalContext.current
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) },
+            .pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) }
+            .padding(top = insetTop, bottom = insetBottom),
         contentAlignment = Alignment.Center,
     ) {
         val request = remember(item.uri) { ImageRequest.Builder(ctx).data(item.uri).size(1280).build() }
-        AsyncImage(
-            model = request,
-            contentDescription = item.name,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize(),
-        )
+        // The frame hugs the video, so the duration badge sits on the video's own bottom-right corner.
         Box(
             modifier = Modifier
-                .size(76.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary)
-                .bounceClick(onClick = onPlay),
+                .aspectRatio(
+                    if (item.width > 0 && item.height > 0) item.width.toFloat() / item.height else 16f / 9f,
+                    matchHeightConstraintsFirst = false,
+                ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                GIcons.Play, contentDescription = "Play video",
-                tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(32.dp),
+            AsyncImage(
+                model = request,
+                contentDescription = item.name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .size(76.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .bounceClick(onClick = onPlay),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    GIcons.Play, contentDescription = "Play video",
+                    tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(32.dp),
+                )
+            }
+            Text(
+                text = formatDuration(item.durationMs),
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(10.dp)
+                    .clip(CircleShape)
+                    .background(ChromeBg)
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
             )
         }
-        Text(
-            text = formatDuration(item.durationMs),
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .align(Alignment.Center)
-                .padding(top = 110.dp)
-                .clip(CircleShape)
-                .background(ChromeBg)
-                .padding(horizontal = 10.dp, vertical = 4.dp),
-        )
     }
 }
 
 @Composable
 private fun ZoomableImage(
     item: MediaItem,
+    insetTop: Dp,
+    insetBottom: Dp,
     onTap: () -> Unit,
-    onSwipeUp: () -> Unit,
     onSwipeDown: () -> Unit,
 ) {
     val ctx = LocalContext.current
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var box by remember { mutableStateOf(IntSize.Zero) }
+    var rotation by remember { mutableFloatStateOf(0f) }
+    var imgSize by remember { mutableStateOf(IntSize.Zero) }
+    val density = LocalDensity.current
     val scope = rememberCoroutineScope()
+
+    // When turned sideways the picture must shrink/grow so it still fits between the bars.
+    val fitFactor = run {
+        val availW = box.width.toFloat()
+        val availH = (box.height - with(density) { (insetTop + insetBottom).toPx() }).coerceAtLeast(1f)
+        if (imgSize.width <= 0 || imgSize.height <= 0 || availW <= 0f) {
+            1f
+        } else {
+            val iw = imgSize.width.toFloat()
+            val ih = imgSize.height.toFloat()
+            val s0 = minOf(availW / iw, availH / ih)
+            val s1 = minOf(availW / ih, availH / iw)
+            val t = kotlin.math.abs(kotlin.math.sin(Math.toRadians(rotation.toDouble()))).toFloat()
+            1f + (s1 / s0 - 1f) * t
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { box = it }
-            // swipe up = details, swipe down = close (only while not zoomed)
+            // swipe down = close (only while not zoomed)
             .pointerInput(Unit) {
                 var total = 0f
                 detectVerticalDragGestures(
                     onDragStart = { total = 0f },
                     onDragEnd = {
                         if (scale <= 1.01f) {
-                            if (total < -140f) onSwipeUp() else if (total > 200f) onSwipeDown()
+                            if (total > 200f) onSwipeDown()
                         }
                         total = 0f
                     },
@@ -353,12 +394,18 @@ private fun ZoomableImage(
             .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
+                    var twisted = false
                     do {
                         val event = awaitPointerEvent()
                         val zoom = event.calculateZoom()
                         val pan = event.calculatePan()
+                        val multi = event.changes.count { it.pressed } >= 2
+                        if (multi) {
+                            twisted = true
+                            rotation += event.calculateRotation()
+                        }
                         val newScale = (scale * zoom).coerceIn(1f, 6f)
-                        if (scale > 1f || newScale > 1f) {
+                        if (scale > 1f || newScale > 1f || multi) {
                             val maxX = box.width * (newScale - 1f) / 2f
                             val maxY = box.height * (newScale - 1f) / 2f
                             offset = if (newScale <= 1f) {
@@ -373,6 +420,18 @@ private fun ZoomableImage(
                             event.changes.forEach { if (it.positionChanged()) it.consume() }
                         }
                     } while (event.changes.any { it.pressed })
+                    if (twisted) {
+                        // Snap to the nearest quarter turn.
+                        val from = rotation
+                        val to = Math.round(from / 90f) * 90f
+                        scope.launch {
+                            animate(
+                                initialValue = from,
+                                targetValue = to,
+                                animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow),
+                            ) { v, _ -> rotation = v }
+                        }
+                    }
                 }
             },
         contentAlignment = Alignment.Center,
@@ -382,11 +441,20 @@ private fun ZoomableImage(
             model = request,
             contentDescription = item.name,
             contentScale = ContentScale.Fit,
+            onSuccess = { state ->
+                val d = state.result.drawable
+                if (d.intrinsicWidth > 0 && d.intrinsicHeight > 0) {
+                    imgSize = IntSize(d.intrinsicWidth, d.intrinsicHeight)
+                }
+            },
             modifier = Modifier
                 .fillMaxSize()
+                .padding(top = insetTop, bottom = insetBottom)
                 .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
+                    val sc = scale * fitFactor
+                    scaleX = sc
+                    scaleY = sc
+                    rotationZ = rotation
                     translationX = offset.x
                     translationY = offset.y
                 },
