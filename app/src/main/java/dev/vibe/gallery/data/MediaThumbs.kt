@@ -42,7 +42,7 @@ class MediaThumbFetcher(
 
     class Factory(private val context: Context) : Fetcher.Factory<Uri> {
         override fun create(data: Uri, options: Options, imageLoader: ImageLoader): Fetcher? {
-            if (options.parameters.value("thumb") != true) return null
+            if (options.parameters.value<Boolean>("thumb") != true) return null
             if (data.authority != "media") return null
             return MediaThumbFetcher(context, data, options)
         }

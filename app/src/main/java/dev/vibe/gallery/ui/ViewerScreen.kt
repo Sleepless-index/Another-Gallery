@@ -385,14 +385,25 @@ private fun ZoomableImage(
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
                     var twisted = false
+                    var twistRaw = 0f
                     do {
                         val event = awaitPointerEvent()
                         val zoom = event.calculateZoom()
                         val pan = event.calculatePan()
                         val multi = event.changes.count { it.pressed } >= 2
-                        if (multi) {
-                            twisted = true
-                            rotation += event.calculateRotation()
+                        if (multi && scale <= 1.05f) {
+                            // Pinching with two thumbs wobbles a little; only treat it as a
+                            // rotation once the fingers have clearly twisted.
+                            val r = event.calculateRotation()
+                            if (twisted) {
+                                rotation += r
+                            } else {
+                                twistRaw += r
+                                if (kotlin.math.abs(twistRaw) > 18f) {
+                                    twisted = true
+                                    rotation += twistRaw - (if (twistRaw > 0) 18f else -18f)
+                                }
+                            }
                         }
                         val newScale = (scale * zoom).coerceIn(1f, 6f)
                         if (scale > 1f || newScale > 1f || multi) {

@@ -1,5 +1,12 @@
 package dev.vibe.gallery.ui
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.Canvas
 import android.os.Build
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -214,20 +221,23 @@ private fun Swatch(color: Color, selected: Boolean, label: String, content: @Com
 @Composable
 private fun CustomColorDialog(initial: Int, onDismiss: () -> Unit, onApply: (Int) -> Unit) {
     val cs = MaterialTheme.colorScheme
-    val start = remember {
-        val hsl = FloatArray(3)
-        ColorUtils.colorToHSL(initial, hsl)
-        hsl
+    val hsv = remember {
+        val a = FloatArray(3)
+        android.graphics.Color.colorToHSV(initial, a)
+        a
     }
-    var hue by remember { mutableFloatStateOf(start[0]) }
-    var sat by remember { mutableFloatStateOf(start[1]) }
-    var light by remember { mutableFloatStateOf(start[2].coerceIn(0.35f, 0.85f)) }
-    val argb = ColorUtils.HSLToColor(floatArrayOf(hue, sat, light))
-    val sliderColors = SliderDefaults.colors(
-        thumbColor = Color(argb),
-        activeTrackColor = Color(argb),
-        inactiveTrackColor = cs.surfaceVariant,
-    )
+    var hue by remember { mutableFloatStateOf(hsv[0]) }
+    var sat by remember { mutableFloatStateOf(hsv[1]) }
+    var value by remember { mutableFloatStateOf(hsv[2]) }
+    val color = Color.hsv(hue, sat, value)
+    var hex by remember { mutableStateOf(hexOf(color)) }
+    var hexError by remember { mutableStateOf(false) }
+
+    fun pushHex() {
+        hex = hexOf(Color.hsv(hue, sat, value))
+        hexError = false
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = cs.surface,
@@ -235,25 +245,123 @@ private fun CustomColorDialog(initial: Int, onDismiss: () -> Unit, onApply: (Int
         textContentColor = cs.onBackground,
         title = { Text("Custom accent", fontWeight = FontWeight.ExtraBold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                // Saturation (left to right) and brightness (bottom to top) box
                 Box(
-                    Modifier
+                    modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color(argb))
-                )
-                Text("Hue", fontSize = 12.sp, color = cs.onSurfaceVariant)
-                Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f, colors = sliderColors)
-                Text("Saturation", fontSize = 12.sp, color = cs.onSurfaceVariant)
-                Slider(value = sat, onValueChange = { sat = it }, valueRange = 0f..1f, colors = sliderColors)
-                Text("Brightness", fontSize = 12.sp, color = cs.onSurfaceVariant)
-                Slider(value = light, onValueChange = { light = it }, valueRange = 0.35f..0.85f, colors = sliderColors)
+                        .height(190.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .pointerInput(Unit) {
+                            fun set(p: Offset) {
+                                sat = (p.x / size.width).coerceIn(0f, 1f)
+                                value = 1f - (p.y / size.height).coerceIn(0f, 1f)
+                                pushHex()
+                            }
+                            detectTapGestures { set(it) }
+                        }
+                        .pointerInput(Unit) {
+                            fun set(p: Offset) {
+                                sat = (p.x / size.width).coerceIn(0f, 1f)
+                                value = 1f - (p.y / size.height).coerceIn(0f, 1f)
+                                pushHex()
+                            }
+                            detectDragGestures(onDragStart = { set(it) }) { change, _ ->
+                                change.consume()
+                                set(change.position)
+                            }
+                        },
+                ) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        drawRect(Brush.horizontalGradient(listOf(Color.White, Color.hsv(hue, 1f, 1f))))
+                        drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
+                        val c = Offset(sat * size.width, (1f - value) * size.height)
+                        drawCircle(Color.Black.copy(alpha = 0.35f), 12.dp.toPx(), c)
+                        drawCircle(Color.White, 11.dp.toPx(), c, style = Stroke(3.dp.toPx()))
+                        drawCircle(Color.hsv(hue, sat, value), 8.dp.toPx(), c)
+                    }
+                }
+
+                // Hue bar
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(28.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .pointerInput(Unit) {
+                            detectTapGestures {
+                                hue = (it.x / size.width).coerceIn(0f, 1f) * 360f
+                                pushHex()
+                            }
+                        }
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragStart = {
+                                    hue = (it.x / size.width).coerceIn(0f, 1f) * 360f
+                                    pushHex()
+                                },
+                            ) { change, _ ->
+                                change.consume()
+                                hue = (change.position.x / size.width).coerceIn(0f, 1f) * 360f
+                                pushHex()
+                            }
+                        },
+                ) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        drawRect(
+                            Brush.horizontalGradient(
+                                (0..6).map { Color.hsv(it * 60f, 1f, 1f) }
+                            )
+                        )
+                        val x = (hue / 360f) * size.width
+                        drawCircle(Color.Black.copy(alpha = 0.35f), 13.dp.toPx(), Offset(x, size.height / 2f))
+                        drawCircle(Color.White, 12.dp.toPx(), Offset(x, size.height / 2f), style = Stroke(3.dp.toPx()))
+                        drawCircle(Color.hsv(hue, 1f, 1f), 9.dp.toPx(), Offset(x, size.height / 2f))
+                    }
+                }
+
+                // Preview + hex code
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(color)
+                    )
+                    OutlinedTextField(
+                        value = hex,
+                        onValueChange = { raw ->
+                            val cleaned = raw.uppercase().filter { it == '#' || it in '0'..'9' || it in 'A'..'F' }.take(7)
+                            hex = if (cleaned.startsWith("#")) cleaned else "#$cleaned".take(7)
+                            val digits = hex.removePrefix("#")
+                            if (digits.length == 6) {
+                                val parsed = digits.toInt(16)
+                                val a = FloatArray(3)
+                                android.graphics.Color.colorToHSV(0xFF000000.toInt() or parsed, a)
+                                hue = a[0]; sat = a[1]; value = a[2]
+                                hexError = false
+                            } else {
+                                hexError = true
+                            }
+                        },
+                        singleLine = true,
+                        isError = hexError,
+                        label = { Text("Hex code") },
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onApply(argb) }) {
-                Text("Apply", color = cs.primary, fontWeight = FontWeight.Bold)
+            TextButton(onClick = { onApply(color.toArgb()) }, enabled = !hexError) {
+                Text("Apply", color = if (hexError) cs.onSurfaceVariant else cs.primary, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -263,6 +371,8 @@ private fun CustomColorDialog(initial: Int, onDismiss: () -> Unit, onApply: (Int
         },
     )
 }
+
+private fun hexOf(c: Color): String = "#%06X".format(c.toArgb() and 0xFFFFFF)
 
 @Composable
 fun SettingsScreen(vm: GalleryViewModel) {
