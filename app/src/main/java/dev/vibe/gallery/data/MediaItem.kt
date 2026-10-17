@@ -21,6 +21,8 @@ data class MediaItem(
     val bucketId: Long,
     val bucketName: String,
     val relativePath: String,
+    /** When the item was moved to the trash (0 if unknown / not trashed). */
+    val trashedMs: Long = 0L,
 ) {
     /** width / height, clamped so masonry cards never get absurdly tall or wide. */
     val aspect: Float

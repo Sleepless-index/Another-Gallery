@@ -174,7 +174,7 @@ fun GalleryRoot(
                 popExitTransition = { slideOutHorizontally(tween(260)) { it / 5 } + fadeOut(tween(220)) },
             ) { backStackEntry ->
                 val id = backStackEntry.arguments?.getLong("id") ?: 0L
-                val items by vm.items.collectAsStateWithLifecycle()
+                val items by vm.allItems.collectAsStateWithLifecycle()
                 val list = remember(items, id) { items.filter { it.bucketId == id } }
                 val title = list.firstOrNull()?.bucketName?.takeIf { it.isNotBlank() } ?: "Album"
                 CollectionScreen(

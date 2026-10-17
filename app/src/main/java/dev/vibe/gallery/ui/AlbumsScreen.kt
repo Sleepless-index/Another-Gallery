@@ -40,6 +40,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -97,28 +98,50 @@ private fun SmartTile(icon: ImageVector, title: String, count: String, tint: Col
 }
 
 @Composable
-private fun AlbumTile(name: String, count: Int, cover: dev.vibe.gallery.data.MediaItem, onClick: () -> Unit) {
+private fun AlbumTile(
+    name: String,
+    count: Int,
+    cover: dev.vibe.gallery.data.MediaItem,
+    pinned: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
     val ctx = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .bounceClick(onClick = onClick),
+            .bounceClick(onLongClick = onLongClick, onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         val request = remember(cover.uri) {
             dev.vibe.gallery.data.thumbRequest(ctx, cover.uri, 480, cover.isVideo)
         }
-        AsyncImage(
-            model = request,
-            contentDescription = name,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(20.dp))
-                .background(cs.surfaceVariant),
-        )
+        Box {
+            AsyncImage(
+                model = request,
+                contentDescription = name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(cs.surfaceVariant),
+            )
+            if (pinned) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(Color.Black.copy(alpha = 0.55f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(GIcons.Pin, contentDescription = "Pinned", tint = Color.White, modifier = Modifier.size(14.dp))
+                }
+            }
+        }
         Column(Modifier.padding(horizontal = 4.dp)) {
             Text(
                 text = name,
@@ -138,6 +161,54 @@ private fun AlbumTile(name: String, count: Int, cover: dev.vibe.gallery.data.Med
     }
 }
 
+@Composable
+private fun ActionRow(icon: ImageVector, label: String, tint: Color? = null, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val color = tint ?: cs.onBackground
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .bounceClick(onClick = onClick)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+        Text(label, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, color = color)
+    }
+}
+
+@Composable
+private fun AlbumActionsDialog(
+    album: dev.vibe.gallery.data.Album,
+    pinned: Boolean,
+    hidden: Boolean,
+    onDismiss: () -> Unit,
+    onPin: () -> Unit,
+    onRename: () -> Unit,
+    onHide: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = cs.surface,
+        title = { Text(album.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        text = {
+            Column {
+                if (!hidden) ActionRow(GIcons.Pin, if (pinned) "Unpin from top" else "Pin to top", onClick = onPin)
+                ActionRow(GIcons.Edit, "Rename", onClick = onRename)
+                ActionRow(GIcons.EyeOff, if (hidden) "Show album" else "Hide album", onClick = onHide)
+                ActionRow(GIcons.Trash, "Delete album", tint = HeartRed, onClick = onDelete)
+            }
+        },
+        confirmButton = {},
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
 /** The Recent album shows this many of the newest items. */
 const val RecentLimit = 200
 
@@ -155,8 +226,15 @@ fun AlbumsScreen(
     val allItems by vm.items.collectAsStateWithLifecycle()
     val videos by vm.videos.collectAsStateWithLifecycle()
     val trashed by vm.trashed.collectAsStateWithLifecycle()
+    val hiddenAlbums by vm.hiddenAlbums.collectAsStateWithLifecycle()
+    val prefs by vm.prefs.collectAsStateWithLifecycle()
+    var showHidden by rememberSaveable { mutableStateOf(false) }
+    var actionAlbum by remember { mutableStateOf<dev.vibe.gallery.data.Album?>(null) }
+    var renaming by remember { mutableStateOf<dev.vibe.gallery.data.Album?>(null) }
+    var deleting by remember { mutableStateOf<dev.vibe.gallery.data.Album?>(null) }
     val cs = MaterialTheme.colorScheme
     val ctx = LocalContext.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     LaunchedEffect(Unit) { vm.loadTrash() }
@@ -176,6 +254,15 @@ fun AlbumsScreen(
                                 vm.refresh()
                             },
                         )
+                        if (hiddenAlbums.isNotEmpty()) {
+                            CompactMenuItem(
+                                text = { Text(if (showHidden) "Hide hidden albums" else "Hidden albums (${hiddenAlbums.size})") },
+                                onClick = {
+                                    menu = false
+                                    showHidden = !showHidden
+                                },
+                            )
+                        }
                         CompactMenuItem(
                             text = { Text("Settings") },
                             onClick = {
@@ -249,10 +336,90 @@ fun AlbumsScreen(
                         name = album.name,
                         count = album.count,
                         cover = album.cover,
+                        pinned = album.bucketId in prefs.pinned,
+                        onLongClick = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            actionAlbum = album
+                        },
                         onClick = { onOpenAlbum(album.bucketId) },
                     )
                 }
             }
+            if (showHidden && hiddenAlbums.isNotEmpty()) {
+                item(key = "label_hidden", span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        text = "Hidden albums",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = cs.onBackground,
+                        modifier = Modifier.padding(start = 4.dp, top = 14.dp),
+                    )
+                }
+                itemsIndexed(hiddenAlbums, key = { _, a -> "hidden_${a.bucketId}" }) { _, album ->
+                    Box(Modifier.alpha(0.6f)) {
+                        AlbumTile(
+                            name = album.name,
+                            count = album.count,
+                            cover = album.cover,
+                            onLongClick = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                actionAlbum = album
+                            },
+                            onClick = { onOpenAlbum(album.bucketId) },
+                        )
+                    }
+                }
+            }
         }
+    }
+
+    actionAlbum?.let { a ->
+        val isHidden = a.bucketId in prefs.hidden
+        AlbumActionsDialog(
+            album = a,
+            pinned = a.bucketId in prefs.pinned,
+            hidden = isHidden,
+            onDismiss = { actionAlbum = null },
+            onPin = { vm.togglePin(a); actionAlbum = null },
+            onRename = { renaming = a; actionAlbum = null },
+            onHide = { vm.setHidden(a, !isHidden); actionAlbum = null },
+            onDelete = { deleting = a; actionAlbum = null },
+        )
+    }
+    renaming?.let { a ->
+        var text by remember(a.bucketId) { mutableStateOf(a.name) }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { renaming = null },
+            containerColor = cs.surface,
+            title = { Text("Rename album", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                androidx.compose.material3.OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(60) },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    enabled = text.isNotBlank(),
+                    onClick = { vm.renameAlbum(a, text); renaming = null },
+                ) { Text("Rename") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { renaming = null }) { Text("Cancel") } },
+        )
+    }
+    deleting?.let { a ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deleting = null },
+            containerColor = cs.surface,
+            title = { Text("Delete \"${a.name}\"?", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = { Text("All ${a.count} items in this album will be moved to the trash.", color = cs.onSurfaceVariant) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { vm.deleteAlbum(a); deleting = null },
+                ) { Text("Delete", color = HeartRed) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+        )
     }
 }

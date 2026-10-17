@@ -18,6 +18,43 @@ private fun rrect(x: Float, y: Float, w: Float, h: Float, r: Float): String =
         "a $r $r 0 0 1 ${-r} $r h ${-(w - 2 * r)} a $r $r 0 0 1 ${-r} ${-r} " +
         "v ${-(h - 2 * r)} a $r $r 0 0 1 $r ${-r} z"
 
+
+private fun f2(v: Double): String = String.format(java.util.Locale.US, "%.2f", v)
+
+/** A rounded rectangle centred at (cx, cy), rotated by [deg] degrees. */
+private fun tiltedRRect(cx: Double, cy: Double, w: Double, h: Double, r: Double, deg: Double): String {
+    val t = Math.toRadians(deg)
+    val ct = Math.cos(t)
+    val st = Math.sin(t)
+    fun p(x: Double, y: Double) = f2(cx + x * ct - y * st) + " " + f2(cy + x * st + y * ct)
+    val a = w / 2
+    val b = h / 2
+    val rr = f2(r)
+    return "M ${p(-a + r, -b)} L ${p(a - r, -b)} A $rr $rr 0 0 1 ${p(a, -b + r)} " +
+        "L ${p(a, b - r)} A $rr $rr 0 0 1 ${p(a - r, b)} " +
+        "L ${p(-a + r, b)} A $rr $rr 0 0 1 ${p(-a, b - r)} " +
+        "L ${p(-a, -b + r)} A $rr $rr 0 0 1 ${p(-a + r, -b)} z"
+}
+
+/** Clockwise arc around (12, 12) from [a0] to [a1] degrees, ending in an open arrow head. */
+private fun arcArrow(r: Double, a0: Double, a1: Double): String {
+    fun pt(a: Double) = Pair(12 + r * Math.cos(Math.toRadians(a)), 12 + r * Math.sin(Math.toRadians(a)))
+    val s = pt(a0)
+    val e = pt(a1)
+    val t = Math.toRadians(a1)
+    val tx = -Math.sin(t)
+    val ty = Math.cos(t)
+    val len = 2.4
+    fun barb(sign: Double): String {
+        val ang = Math.toRadians(145.0) * sign
+        val bx = tx * Math.cos(ang) - ty * Math.sin(ang)
+        val by = tx * Math.sin(ang) + ty * Math.cos(ang)
+        return f2(e.first + bx * len) + " " + f2(e.second + by * len)
+    }
+    return "M ${f2(s.first)} ${f2(s.second)} A ${f2(r)} ${f2(r)} 0 0 1 ${f2(e.first)} ${f2(e.second)} " +
+        "M ${barb(1.0)} L ${f2(e.first)} ${f2(e.second)} L ${barb(-1.0)}"
+}
+
 private class IconBuilder(name: String) {
     private val b = ImageVector.Builder(
         name = name,
@@ -121,26 +158,32 @@ object GIcons {
     }
     val ScreenRotate: ImageVector by lazy {
         IconBuilder("ScreenRotate")
-            .s(rrect(8.5f, 7f, 7f, 10f, 1.8f))
-            .s("M 3.5 10 A 8.5 8.5 0 0 1 12 3.5 M 12 3.5 l -3 -1 M 12 3.5 l -1 3")
-            .s("M 20.5 14 A 8.5 8.5 0 0 1 12 20.5 M 12 20.5 l 3 1 M 12 20.5 l 1 -3")
+            .s(tiltedRRect(12.0, 12.0, 6.0, 10.0, 1.6, 45.0))
+            .s(arcArrow(9.2, 200.0, 250.0))
+            .s(arcArrow(9.2, 20.0, 70.0))
             .build()
+    }
+    val Playlist: ImageVector by lazy {
+        IconBuilder("Playlist").s("M 4 7 h 11 M 4 12 h 7 M 4 17 h 7").f("M 15 11 v 8 l 6 -4 z").build()
+    }
+    val Repeat: ImageVector by lazy {
+        IconBuilder("Repeat").s("M 4 11 V 9 a 3 3 0 0 1 3 -3 h 12 M 16 3 l 3 3 l -3 3")
+            .s("M 20 13 v 2 a 3 3 0 0 1 -3 3 H 5 M 8 21 l -3 -3 l 3 -3").build()
+    }
+    val Shuffle: ImageVector by lazy {
+        IconBuilder("Shuffle").s("M 3 7 h 3 c 5 0 5 10 10 10 h 4 M 17 14 l 3 3 l -3 3")
+            .s("M 3 17 h 3 c 2 0 3 -1.2 4 -2.5 M 14 9.5 C 15 8.2 16 7 18 7 h 2 M 17 4 l 3 3 l -3 3").build()
+    }
+    val Pin: ImageVector by lazy {
+        IconBuilder("Pin").s("M 9 4 h 6 l -1 5 l 3 3 H 7 l 3 -3 z M 12 12 v 8").build()
+    }
+    val EyeOff: ImageVector by lazy {
+        IconBuilder("EyeOff").s("M 3 12 s 3.5 -6 9 -6 s 9 6 9 6 s -3.5 6 -9 6 s -9 -6 -9 -6 z")
+            .s(circle(12f, 12f, 2.6f)).s("M 4 4 L 20 20").build()
     }
     val ChevronDown: ImageVector by lazy { IconBuilder("ChevronDown").s("M 6 9 l 6 6 l 6 -6").build() }
     val Location: ImageVector by lazy {
         IconBuilder("Location").s("M 12 21 s -6.5 -5.6 -6.5 -11 a 6.5 6.5 0 0 1 13 0 c 0 5.4 -6.5 11 -6.5 11 z").s(circle(12f, 10f, 2.3f)).build()
-    }
-    val RotateToPortrait: ImageVector by lazy {
-        IconBuilder("RotateToPortrait").s(rrect(9f, 6f, 6f, 12f, 1.6f))
-            .s("M 3.6 8.4 A 9.5 9.5 0 0 1 9 2.9 M 9 2.9 l -2.29 -0.69 M 9 2.9 l -1.45 1.91")
-            .s("M 20.4 15.6 A 9.5 9.5 0 0 1 15 21.1 M 15 21.1 l 2.29 0.69 M 15 21.1 l 1.45 -1.91")
-            .build()
-    }
-    val RotateToLandscape: ImageVector by lazy {
-        IconBuilder("RotateToLandscape").s(rrect(6f, 9f, 12f, 6f, 1.6f))
-            .s("M 3.6 8.4 A 9.5 9.5 0 0 1 9 2.9 M 9 2.9 l -2.29 -0.69 M 9 2.9 l -1.45 1.91")
-            .s("M 20.4 15.6 A 9.5 9.5 0 0 1 15 21.1 M 15 21.1 l 2.29 0.69 M 15 21.1 l 1.45 -1.91")
-            .build()
     }
     val Unlock: ImageVector by lazy {
         IconBuilder("Unlock").s(rrect(5f, 11f, 14f, 9f, 2.5f)).s("M 8 11 V 8 a 4 4 0 0 1 7.5 -1.5").build()
