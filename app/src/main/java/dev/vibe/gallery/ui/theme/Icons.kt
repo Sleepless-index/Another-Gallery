@@ -109,6 +109,10 @@ object GIcons {
             .s("M 3 7.5 A 2 2 0 0 1 5 5.5 h 4 l 2 2 h 8 a 2 2 0 0 1 2 2 v 8 a 2 2 0 0 1 -2 2 H 5 a 2 2 0 0 1 -2 -2 z")
             .s("M 8.5 13.5 h 7 M 13 11 l 2.5 2.5 L 13 16").build()
     }
+    val SdCard: ImageVector by lazy {
+        IconBuilder("SdCard").s("M 8 3 h 6.5 L 19 7.5 V 19 a 2 2 0 0 1 -2 2 H 8 a 2 2 0 0 1 -2 -2 V 5 a 2 2 0 0 1 2 -2 z")
+            .s("M 10 7 v 3 M 13 7 v 3 M 16 9 v 1").build()
+    }
     val Unlock: ImageVector by lazy {
         IconBuilder("Unlock").s(rrect(5f, 11f, 14f, 9f, 2.5f)).s("M 8 11 V 8 a 4 4 0 0 1 7.5 -1.5").build()
     }

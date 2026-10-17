@@ -503,7 +503,7 @@ fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit) {
 
             SectionLabel("Viewer")
             CardGroup {
-                ToggleRow("Blur photo behind details", prefs.blur) { vm.setBlur(it) }
+                ToggleRow("Blurred backgrounds (photo & details)", prefs.blur) { vm.setBlur(it) }
             }
 
             SectionLabel("Storage")
