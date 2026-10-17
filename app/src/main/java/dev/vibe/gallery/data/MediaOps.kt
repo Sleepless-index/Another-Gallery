@@ -17,7 +17,7 @@ object MediaOps {
     /** True when the app has "All files access" and can move files directly. */
     fun hasAllFiles(): Boolean = Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager()
 
-    private fun pathOf(context: Context, uri: Uri): String? =
+    fun pathOf(context: Context, uri: Uri): String? =
         runCatching {
             context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DATA), null, null, null)?.use {
                 if (it.moveToFirst()) it.getString(0) else null

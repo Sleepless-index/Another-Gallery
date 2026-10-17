@@ -1,20 +1,24 @@
 package dev.vibe.gallery.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -26,152 +30,190 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import dev.vibe.gallery.data.Album
 import dev.vibe.gallery.data.MediaItem
 import dev.vibe.gallery.data.MediaOps
+import dev.vibe.gallery.data.formatSize
+import dev.vibe.gallery.data.thumbRequest
 import dev.vibe.gallery.ui.theme.GIcons
 
-/** Pick (or create) an album to copy or move items into. */
+/** Album grid shown for Copy and Move: pick an album, or create a new one. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlbumPickerSheet(
     vm: GalleryViewModel,
     items: List<MediaItem>,
-    initialMove: Boolean,
+    move: Boolean,
     onDismiss: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val context = LocalContext.current
     val albums by vm.albums.collectAsStateWithLifecycle()
-    var move by remember { mutableStateOf(initialMove) }
-    var creating by remember { mutableStateOf(false) }
-    var newName by remember { mutableStateOf("") }
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val all by vm.items.collectAsStateWithLifecycle()
     val roots = remember { MediaOps.storageRoots(context) }
-    var rootIdx by remember { mutableStateOf(0) }
-    val allFiles = remember { MediaOps.hasAllFiles() }
+    var creating by remember { mutableStateOf(false) }
+
+    val sizes = remember(all) {
+        val m = HashMap<Long, Long>()
+        for (it in all) m[it.bucketId] = (m[it.bucketId] ?: 0L) + it.sizeBytes
+        m
+    }
+    // Which albums live on removable storage (shows the SD card badge).
+    val onSd by produceState(emptySet<Long>(), albums) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            albums.filter { a ->
+                MediaOps.pathOf(context, a.cover.uri)?.startsWith(roots.first().second) == false
+            }.map { it.bucketId }.toSet()
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = cs.surface,
+        containerColor = cs.background,
         contentColor = cs.onBackground,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        Column(Modifier.fillMaxSize().navigationBarsPadding()) {
             Text(
-                text = if (move) "Move ${items.size} to…" else "Copy ${items.size} to…",
+                text = (if (move) "Move " else "Copy ") + items.size + " to…",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ModeChip("Move", move) { move = true }
-                ModeChip("Copy", !move) { move = false }
-            }
-            if (!allFiles) {
-                Text(
-                    "Turn on All files access in Settings to move without prompts and to use the SD card.",
-                    fontSize = 12.sp,
-                    color = cs.onSurfaceVariant,
-                )
-            }
-            LazyColumn(Modifier.heightIn(max = 420.dp)) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
                 item(key = "new") {
-                    Column {
-                        Row(
-                            modifier = Modifier
+                    Column(Modifier.fillMaxWidth().bounceClick(onClick = { creating = true }), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            Modifier
                                 .fillMaxWidth()
-                                .height(56.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { creating = !creating },
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(20.dp))
+                                .border(BorderStroke(1.dp, cs.outline), RoundedCornerShape(20.dp))
+                                .background(cs.surface),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Icon(GIcons.Plus, contentDescription = null, tint = cs.primary, modifier = Modifier.size(20.dp))
-                            Text("New album", fontWeight = FontWeight.Bold, color = cs.primary)
-                        }
-                        if (creating && roots.size > 1) {
-                            Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                roots.forEachIndexed { i, r -> ModeChip(r.first, rootIdx == i) { rootIdx = i } }
-                            }
-                        }
-                        if (creating) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            Box(
+                                Modifier.size(64.dp).border(BorderStroke(2.5.dp, cs.onSurfaceVariant), androidx.compose.foundation.shape.CircleShape),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                OutlinedTextField(
-                                    value = newName,
-                                    onValueChange = { newName = it.take(40) },
-                                    singleLine = true,
-                                    label = { Text("Album name") },
-                                    modifier = Modifier.weight(1f),
-                                )
-                                TextButton(
-                                    enabled = newName.isNotBlank(),
-                                    onClick = {
-                                        vm.transferToNew(items, roots[rootIdx].second, newName, move)
-                                        onDismiss()
-                                    },
-                                ) { Text("Create", fontWeight = FontWeight.Bold) }
+                                Icon(GIcons.Plus, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(32.dp))
                             }
                         }
+                        Text("New album", fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
                     }
                 }
                 items(albums, key = { it.bucketId }) { album ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable {
-                                vm.transferToAlbum(items, album, move)
-                                onDismiss()
-                            },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            album.name,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                        )
-                        Text("%,d".format(album.count), fontSize = 13.sp, color = cs.onSurfaceVariant)
-                    }
+                    AlbumPickTile(
+                        album = album,
+                        bytes = sizes[album.bucketId] ?: 0L,
+                        sd = album.bucketId in onSd,
+                        onClick = {
+                            vm.transferToAlbum(items, album, move)
+                            onDismiss()
+                        },
+                    )
                 }
             }
+        }
+    }
+
+    if (creating) {
+        var name by remember { mutableStateOf("") }
+        var rootIdx by remember { mutableStateOf(0) }
+        AlertDialog(
+            onDismissRequest = { creating = false },
+            containerColor = cs.surface,
+            title = { Text("New album", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it.take(40) },
+                        singleLine = true,
+                        label = { Text("Album name") },
+                    )
+                    if (roots.size > 1) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            roots.forEachIndexed { i, r -> PickChip(r.first, rootIdx == i) { rootIdx = i } }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = name.isNotBlank(),
+                    onClick = {
+                        vm.transferToNew(items, roots[rootIdx].second, name, move)
+                        creating = false
+                        onDismiss()
+                    },
+                ) { Text(if (move) "Create & move" else "Create & copy") }
+            },
+            dismissButton = { TextButton(onClick = { creating = false }) { Text("Cancel") } },
+        )
+    }
+}
+
+@Composable
+private fun AlbumPickTile(album: Album, bytes: Long, sd: Boolean, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val ctx = LocalContext.current
+    Column(Modifier.fillMaxWidth().bounceClick(onClick = onClick), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(20.dp)).background(cs.surfaceVariant)) {
+            AsyncImage(
+                model = remember(album.cover.uri) { thumbRequest(ctx, album.cover.uri, 400, album.cover.isVideo) },
+                contentDescription = album.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (sd) {
+                Icon(
+                    GIcons.SdCard, "SD card", tint = Color.White,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).size(22.dp),
+                )
+            }
+        }
+        Column(Modifier.padding(horizontal = 4.dp)) {
+            Text(album.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                "%,d %s (%s)".format(album.count, if (album.count == 1) "item" else "items", formatSize(bytes)),
+                fontSize = 12.sp, color = cs.onSurfaceVariant,
+            )
         }
     }
 }
 
 @Composable
-private fun ModeChip(label: String, active: Boolean, onClick: () -> Unit) {
+private fun PickChip(label: String, active: Boolean, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(18.dp))
             .background(if (active) cs.primary else cs.surfaceVariant)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 9.dp),
+            .bounceClick(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
     ) {
-        Text(
-            label,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = if (active) cs.onPrimary else cs.onBackground,
-        )
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = if (active) cs.onPrimary else cs.onBackground)
     }
 }
