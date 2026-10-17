@@ -1156,7 +1156,14 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                             .padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { transport() }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            leftChips()
+                            rightButtons()
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(
                                 formatDuration(if (scrubbing) (scrubValue * duration).toLong() else position),
@@ -1198,14 +1205,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                 modifier = Modifier.width(44.dp),
                             )
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            leftChips()
-                            rightButtons()
-                        }
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { transport() }
                     }
                 }
             }
