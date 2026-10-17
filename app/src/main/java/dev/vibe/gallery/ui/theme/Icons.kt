@@ -126,6 +126,10 @@ object GIcons {
             .s("M 20.5 14 A 8.5 8.5 0 0 1 12 20.5 M 12 20.5 l 3 1 M 12 20.5 l 1 -3")
             .build()
     }
+    val ChevronDown: ImageVector by lazy { IconBuilder("ChevronDown").s("M 6 9 l 6 6 l 6 -6").build() }
+    val Location: ImageVector by lazy {
+        IconBuilder("Location").s("M 12 21 s -6.5 -5.6 -6.5 -11 a 6.5 6.5 0 0 1 13 0 c 0 5.4 -6.5 11 -6.5 11 z").s(circle(12f, 10f, 2.3f)).build()
+    }
     val Unlock: ImageVector by lazy {
         IconBuilder("Unlock").s(rrect(5f, 11f, 14f, 9f, 2.5f)).s("M 8 11 V 8 a 4 4 0 0 1 7.5 -1.5").build()
     }

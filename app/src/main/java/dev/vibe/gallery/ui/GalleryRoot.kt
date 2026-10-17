@@ -60,6 +60,7 @@ private val TabRoutes = setOf("photos", "albums", "search")
 fun GalleryRoot(
     vm: GalleryViewModel,
     perms: PermState,
+    onGrantAll: () -> Unit,
     onRequestMedia: () -> Unit,
     onRequestAllFiles: () -> Unit,
     onRequestLocation: () -> Unit,
@@ -68,14 +69,22 @@ fun GalleryRoot(
 ) {
     val cs = MaterialTheme.colorScheme
 
-    var setupDone by rememberSaveable { mutableStateOf(false) }
+    val appCtx = LocalContext.current
+    // Remembered across launches: the setup screen is only for the very first run (or if photo access is lost).
+    var setupDone by remember {
+        mutableStateOf(appCtx.getSharedPreferences("gallery", 0).getBoolean("setupDone", false))
+    }
     if (!perms.media || !setupDone) {
         PermissionsScreen(
             state = perms,
+            onGrantAll = onGrantAll,
             onRequestMedia = onRequestMedia,
             onRequestAllFiles = onRequestAllFiles,
             onRequestLocation = onRequestLocation,
-            onContinue = { setupDone = true },
+            onContinue = {
+                setupDone = true
+                appCtx.getSharedPreferences("gallery", 0).edit().putBoolean("setupDone", true).apply()
+            },
         )
         return
     }
@@ -137,6 +146,7 @@ fun GalleryRoot(
             ) {
                 PermissionsScreen(
                     state = perms,
+                    onGrantAll = onGrantAll,
                     onRequestMedia = onRequestMedia,
                     onRequestAllFiles = onRequestAllFiles,
                     onRequestLocation = onRequestLocation,
