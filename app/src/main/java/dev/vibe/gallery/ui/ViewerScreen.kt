@@ -136,7 +136,8 @@ fun ViewerScreen(
     val insetTop by animateDpAsState(if (chrome) topBarH else 0.dp, tween(220), label = "insetTop")
     val insetBottom by animateDpAsState(if (chrome) bottomBarH else 0.dp, tween(220), label = "insetBottom")
 
-    val blurDp by animateDpAsState(if (showInfo) 28.dp else 0.dp, tween(260), label = "infoBlur")
+    val blurOn = vm.prefs.collectAsStateWithLifecycle().value.blur
+    val blurDp by animateDpAsState(if (showInfo && blurOn) 28.dp else 0.dp, tween(260), label = "infoBlur")
     Box(Modifier.fillMaxSize().background(Color.Black).blur(blurDp)) {
         HorizontalPager(
             state = pagerState,
@@ -307,7 +308,7 @@ fun ViewerScreen(
     }
 
     if (showInfo) {
-        InfoSheet(item = current, onDismiss = { showInfo = false }, onRename = { vm.rename(current, it) })
+        InfoSheet(item = current, translucent = blurOn, onDismiss = { showInfo = false }, onRename = { vm.rename(current, it) })
     }
     picker?.let { move ->
         AlbumPickerSheet(vm = vm, items = listOf(current), initialMove = move, onDismiss = { picker = null })
