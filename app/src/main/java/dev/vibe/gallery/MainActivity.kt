@@ -38,7 +38,8 @@ import kotlinx.coroutines.launch
 class MainActivity : FragmentActivity() {
 
     private val vm: GalleryViewModel by viewModels()
-    private val perms = mutableStateOf(PermState(false, false, false))
+    private val perms = mutableStateOf(PermState(false, false, false, false))
+    private var chainAllFiles = false
 
     /** Android 10 only: files we must delete one by one, asking permission for each. */
     private val legacyDeleteQueue = ArrayDeque<Uri>()
@@ -68,6 +69,10 @@ class MainActivity : FragmentActivity() {
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             updatePermission()
+            if (chainAllFiles) {
+                chainAllFiles = false
+                if (!perms.value.allFiles) openAllFilesSettings()
+            }
         }
 
     private fun mediaPermissions(): Array<String> =
@@ -97,15 +102,36 @@ class MainActivity : FragmentActivity() {
         }.getOrDefault(false)
     }
 
+    private fun granted(p: String) =
+        ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
+
     private fun updatePermission() {
-        val granted = hasMediaPermission()
-        if (granted && !perms.value.media) vm.refresh()
+        val images = if (Build.VERSION.SDK_INT >= 33) granted(Manifest.permission.READ_MEDIA_IMAGES)
+        else granted(Manifest.permission.READ_EXTERNAL_STORAGE)
+        val videos = if (Build.VERSION.SDK_INT >= 33) granted(Manifest.permission.READ_MEDIA_VIDEO)
+        else granted(Manifest.permission.READ_EXTERNAL_STORAGE)
+        if (images && videos && !perms.value.media) vm.refresh()
         perms.value = PermState(
-            media = granted,
+            images = images,
+            videos = videos,
             allFiles = Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager(),
-            location = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_MEDIA_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED,
+            location = granted(Manifest.permission.ACCESS_MEDIA_LOCATION),
         )
+    }
+
+    /** One tap: ask for everything missing, then send the user to the All files page. */
+    private fun grantAll() {
+        val missing = buildList {
+            if (!perms.value.media) addAll(mediaPermissions())
+            if (!perms.value.location) add(Manifest.permission.ACCESS_MEDIA_LOCATION)
+        }
+        chainAllFiles = !perms.value.allFiles
+        if (missing.isEmpty()) {
+            chainAllFiles = false
+            openAllFilesSettings()
+        } else {
+            permissionLauncher.launch(missing.toTypedArray())
+        }
     }
 
     private fun openAllFilesSettings() {
@@ -135,6 +161,7 @@ class MainActivity : FragmentActivity() {
                 GalleryRoot(
                     vm = vm,
                     perms = perms.value,
+                    onGrantAll = { grantAll() },
                     onRequestMedia = { permissionLauncher.launch(mediaPermissions()) },
                     onRequestAllFiles = { openAllFilesSettings() },
                     onRequestLocation = { permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_MEDIA_LOCATION)) },
