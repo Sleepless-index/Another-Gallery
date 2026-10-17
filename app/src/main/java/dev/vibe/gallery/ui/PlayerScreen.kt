@@ -82,7 +82,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.media3.common.C
+import androidx.media3.common.MimeTypes
+import dev.vibe.gallery.data.MediaItem
+import dev.vibe.gallery.data.MediaOps
+import dev.vibe.gallery.data.PlayMode
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
@@ -168,6 +174,37 @@ private fun SkipButton(icon: ImageVector, desc: String, enabled: Boolean, onClic
     }
 }
 
+/** Set when one video hands over to another (Next / Previous / auto-advance) so the new one starts playing. */
+private object PlayerHandoff {
+    var autoStart = false
+}
+
+private fun subtitleConfig(uri: android.net.Uri, name: String): ExoMediaItem.SubtitleConfiguration {
+    val lower = name.lowercase(Locale.US)
+    val mime = when {
+        lower.endsWith(".vtt") -> MimeTypes.TEXT_VTT
+        lower.endsWith(".ass") || lower.endsWith(".ssa") -> MimeTypes.TEXT_SSA
+        lower.endsWith(".ttml") || lower.endsWith(".xml") || lower.endsWith(".dfxp") -> MimeTypes.APPLICATION_TTML
+        else -> MimeTypes.APPLICATION_SUBRIP
+    }
+    return ExoMediaItem.SubtitleConfiguration.Builder(uri)
+        .setMimeType(mime)
+        .setLanguage("und")
+        .setLabel(name.substringBeforeLast('.').ifBlank { "Subtitles" })
+        .build()
+}
+
+/** Subtitle files sitting next to the video with the same name (needs All files access). */
+private fun findSiblingSubtitles(context: Context, item: MediaItem): List<ExoMediaItem.SubtitleConfiguration> {
+    val path = MediaOps.pathOf(context, item.uri) ?: return emptyList()
+    val base = path.substringBeforeLast('.')
+    val exts = listOf("srt", "vtt", "ass", "ssa", "ttml")
+    return exts.mapNotNull { ext ->
+        val f = java.io.File("$base.$ext")
+        if (f.isFile) subtitleConfig(android.net.Uri.fromFile(f), f.name) else null
+    }
+}
+
 @Composable
 fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenVideo: (Long) -> Unit) {
     val item = remember(itemId) { vm.findItem(itemId) }
@@ -184,13 +221,43 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     val cs = MaterialTheme.colorScheme
     val config = LocalConfiguration.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    // Subtitle files loaded by the user (or found next to the video), kept so adding one keeps the rest.
+    var extSubs by remember {
+        mutableStateOf(
+            if (item.id >= 0 && MediaOps.hasAllFiles()) findSiblingSubtitles(context, item) else emptyList(),
+        )
+    }
 
     val player = remember {
         val factory = DefaultRenderersFactory(context).setEnableDecoderFallback(true)
         ExoPlayer.Builder(context, factory).build().apply {
-            setMediaItem(ExoMediaItem.fromUri(item.uri))
+            setMediaItem(
+                ExoMediaItem.Builder()
+                    .setUri(item.uri)
+                    .setSubtitleConfigurations(extSubs)
+                    .build(),
+            )
             playWhenReady = false
             prepare()
+        }
+    }
+
+    val subtitlePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val name = uri.lastPathSegment?.substringAfterLast('/') ?: "Subtitles"
+            val cfg = subtitleConfig(uri, name)
+            val keep = extSubs.filter { it.uri != uri }
+            extSubs = keep + cfg
+            val pos = player.currentPosition
+            val wasPlaying = player.playWhenReady
+            player.setMediaItem(
+                ExoMediaItem.Builder().setUri(item.uri).setSubtitleConfigurations(extSubs).build(),
+                pos,
+            )
+            player.prepare()
+            player.playWhenReady = wasPlaying
+            player.trackSelectionParameters = player.trackSelectionParameters
+                .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
         }
     }
 
@@ -212,9 +279,10 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     var speedMenu by remember { mutableStateOf(false) }
     var audioMenu by remember { mutableStateOf(false) }
     var subsMenu by remember { mutableStateOf(false) }
+    var playlistMenu by remember { mutableStateOf(false) }
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
-    val menuOpen = speedMenu || audioMenu || subsMenu
+    val menuOpen = speedMenu || audioMenu || subsMenu || playlistMenu
     var lastHud by remember { mutableStateOf<Hud?>(null) }
     if (hud != null) lastHud = hud
 
@@ -224,6 +292,18 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     val videoIdx = videoList.indexOfFirst { it.id == itemId }
     val prevVideo = if (videoIdx > 0) videoList[videoIdx - 1] else null
     val nextVideo = if (videoIdx >= 0) videoList.getOrNull(videoIdx + 1) else null
+
+    // The Next button / auto-advance: random pick in shuffle mode, otherwise the following video.
+    fun pickNext(): MediaItem? = when {
+        prefs.playMode == PlayMode.SHUFFLE && videoList.size > 1 ->
+            videoList.filter { it.id != itemId }.randomOrNull()
+        else -> nextVideo
+    }
+
+    fun openVideo(target: MediaItem) {
+        PlayerHandoff.autoStart = true
+        onOpenVideo(target.id)
+    }
 
     val audio = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val maxVol = remember { audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
@@ -285,7 +365,12 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY && player.duration > 0) duration = player.duration
                 ended = state == Player.STATE_ENDED
-                if (ended) controls = true
+                if (ended) {
+                    controls = true
+                    if (prefs.playMode == PlayMode.NEXT || prefs.playMode == PlayMode.SHUFFLE) {
+                        pickNext()?.let { openVideo(it) }
+                    }
+                }
             }
 
             override fun onPlayerError(e: PlaybackException) {
@@ -301,7 +386,23 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
             val saved = vm.resumePosition(item.id)
             if (saved != null && saved > 3000) player.seekTo(saved)
         }
-        player.playWhenReady = prefs.autoplay
+        player.playWhenReady = prefs.autoplay || PlayerHandoff.autoStart
+        PlayerHandoff.autoStart = false
+    }
+
+    // Loop mode repeats the current video; the other modes play it once.
+    LaunchedEffect(prefs.playMode) {
+        player.repeatMode = if (prefs.playMode == PlayMode.LOOP) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+    }
+
+    // Keep this video's position fresh so it survives the app being killed or switching videos.
+    LaunchedEffect(player) {
+        while (true) {
+            delay(5000)
+            if (player.isPlaying && item.id >= 0) {
+                vm.saveResume(item.id, player.currentPosition, player.duration.coerceAtLeast(0))
+            }
+        }
     }
 
     LaunchedEffect(player) {
@@ -687,6 +788,13 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                 if (textGroups.isEmpty()) {
                                     CompactMenuItem(text = { Text("No subtitles in this file") }, enabled = false, onClick = {})
                                 }
+                                CompactMenuItem(
+                                    text = { Text("Load subtitle file…") },
+                                    onClick = {
+                                        subsMenu = false
+                                        subtitlePicker.launch(arrayOf("*/*"))
+                                    },
+                                )
                             }
                         }
                     }
@@ -699,7 +807,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                     horizontalArrangement = Arrangement.spacedBy(36.dp),
                 ) {
                     SkipButton(GIcons.SkipPrevious, "Previous video", prevVideo != null) {
-                        prevVideo?.let { onOpenVideo(it.id) }
+                        prevVideo?.let { openVideo(it) }
                     }
                     Box(
                         Modifier
@@ -719,8 +827,8 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                         }
                     }
 
-                    SkipButton(GIcons.SkipNext, "Next video", nextVideo != null) {
-                        nextVideo?.let { onOpenVideo(it.id) }
+                    SkipButton(GIcons.SkipNext, "Next video", pickNext() != null) {
+                        pickNext()?.let { openVideo(it) }
                     }
                 }
 
@@ -837,8 +945,34 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 val landNow = config.orientation == Configuration.ORIENTATION_LANDSCAPE
-                                // The icon shows the orientation you will switch to.
-                                RoundChrome(if (landNow) GIcons.RotateToPortrait else GIcons.RotateToLandscape, "Rotate screen", 36) {
+                                Box {
+                                    RoundChrome(
+                                        when (prefs.playMode) {
+                                            PlayMode.LOOP -> GIcons.Repeat
+                                            PlayMode.SHUFFLE -> GIcons.Shuffle
+                                            else -> GIcons.Playlist
+                                        },
+                                        "Playback mode",
+                                        36,
+                                    ) { playlistMenu = true }
+                                    DropdownMenu(expanded = playlistMenu, onDismissRequest = { playlistMenu = false }) {
+                                        listOf(
+                                            PlayMode.ONCE to "Play once",
+                                            PlayMode.NEXT to "Play next video",
+                                            PlayMode.LOOP to "Loop this video",
+                                            PlayMode.SHUFFLE to "Shuffle",
+                                        ).forEach { (mode, label) ->
+                                            CompactMenuItem(
+                                                text = { Text(if (prefs.playMode == mode) "✓  $label" else "     $label") },
+                                                onClick = {
+                                                    playlistMenu = false
+                                                    vm.setPlayMode(mode)
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                                RoundChrome(GIcons.ScreenRotate, "Rotate screen", 36) {
                                     val land = landNow
                                     activity?.requestedOrientation = if (land) {
                                         ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT

@@ -521,6 +521,41 @@ fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit, onOpenPermissions: 
                 }
             }
 
+            if (Build.VERSION.SDK_INT >= 30) {
+                SectionLabel("Trash")
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(0 to "Never", 7 to "7 days", 15 to "15 days", 30 to "30 days").forEach { (d, label) ->
+                        ThemeChip(
+                            label = label,
+                            active = prefs.trashDays == d,
+                            onClick = { vm.setTrashDays(d) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                Text(
+                    "Auto-empty deletes old trash for good. It runs when the app opens and needs All files access.",
+                    fontSize = 12.sp,
+                    color = cs.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp),
+                )
+                CardGroup(Modifier.padding(top = 10.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .bounceClick(onClick = { vm.emptyTrash() })
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("Empty trash now", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+
             SectionLabel("About")
             CardGroup {
                 Row(
@@ -532,19 +567,6 @@ fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit, onOpenPermissions: 
                 ) {
                     Text("Gallery", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground, modifier = Modifier.weight(1f))
                     Text("v0.1.0", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant)
-                }
-                if (Build.VERSION.SDK_INT >= 30) {
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(cs.outline))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("Deleted items", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground, modifier = Modifier.weight(1f))
-                        Text("Kept 30 days", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant)
-                    }
                 }
             }
         }

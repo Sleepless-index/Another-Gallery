@@ -79,7 +79,7 @@ class MediaRepository(private val context: Context) {
             MediaStore.MediaColumns.BUCKET_ID,
             MediaStore.MediaColumns.BUCKET_DISPLAY_NAME,
             MediaStore.MediaColumns.RELATIVE_PATH,
-        )
+        ) + (if (Build.VERSION.SDK_INT >= 30) arrayOf(MediaStore.MediaColumns.DATE_EXPIRES) else emptyArray())
         val args = Bundle().apply {
             putString(
                 ContentResolver.QUERY_ARG_SQL_SELECTION,
@@ -118,6 +118,7 @@ class MediaRepository(private val context: Context) {
             val iBucket = c.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_ID)
             val iBucketName = c.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
             val iPath = c.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
+            val iExpires = if (Build.VERSION.SDK_INT >= 30) c.getColumnIndex(MediaStore.MediaColumns.DATE_EXPIRES) else -1
 
             while (c.moveToNext()) {
                 val id = c.getLong(iId)
@@ -156,6 +157,10 @@ class MediaRepository(private val context: Context) {
                         bucketId = c.getLong(iBucket),
                         bucketName = c.getString(iBucketName) ?: "",
                         relativePath = c.getString(iPath) ?: "",
+                        trashedMs = if (trashed && iExpires >= 0 && !c.isNull(iExpires)) {
+                            // The system keeps trash for 30 days; DATE_EXPIRES is that deadline in seconds.
+                            c.getLong(iExpires) * 1000 - 30L * 24 * 3600 * 1000
+                        } else 0L,
                     )
                 )
             }

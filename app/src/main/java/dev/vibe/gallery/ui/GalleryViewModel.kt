@@ -10,6 +10,7 @@ import dev.vibe.gallery.data.Entry
 import dev.vibe.gallery.data.FavoriteEntity
 import dev.vibe.gallery.data.LayoutMode
 import dev.vibe.gallery.data.MediaItem
+import dev.vibe.gallery.data.PlayMode
 import dev.vibe.gallery.data.Prefs
 import dev.vibe.gallery.data.MediaOps
 import dev.vibe.gallery.data.ResumeEntity
@@ -57,9 +58,21 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     fun setResume(v: Boolean) = viewModelScope.launch { g.settings.setResume(v) }
     fun setAutoplay(v: Boolean) = viewModelScope.launch { g.settings.setAutoplay(v) }
     fun setBlur(v: Boolean) = viewModelScope.launch { g.settings.setBlur(v) }
+    fun setPlayMode(v: PlayMode) = viewModelScope.launch { g.settings.setPlayMode(v) }
+    fun setTrashDays(v: Int) = viewModelScope.launch {
+        g.settings.setTrashDays(v)
+        purgeTrash()
+    }
 
     // ---- media ----------------------------------------------------------
-    val items: StateFlow<List<MediaItem>> = repo.items
+    /** Everything MediaStore returned, including items in hidden albums. */
+    val allItems: StateFlow<List<MediaItem>> = repo.items
+
+    val items: StateFlow<List<MediaItem>> = combine(repo.items, prefs.map { it.hidden }.distinctUntilChanged()) { list, hidden ->
+        if (hidden.isEmpty()) list else list.filter { it.bucketId !in hidden }
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val loaded: StateFlow<Boolean> = repo.loaded
 
     val photos: StateFlow<List<MediaItem>> = items
@@ -69,8 +82,17 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val albums: StateFlow<List<Album>> = items
-        .map { buildAlbums(it) }
+    /** Visible albums with pinned ones first. */
+    val albums: StateFlow<List<Album>> = combine(items, prefs.map { it.pinned }.distinctUntilChanged()) { list, pinned ->
+        val all = buildAlbums(list)
+        all.filter { it.bucketId in pinned } + all.filter { it.bucketId !in pinned }
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val hiddenAlbums: StateFlow<List<Album>> = combine(repo.items, prefs.map { it.hidden }.distinctUntilChanged()) { list, hidden ->
+        if (hidden.isEmpty()) emptyList() else buildAlbums(list.filter { it.bucketId in hidden })
+    }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -96,11 +118,76 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             repo.refresh()
             _trashed.value = repo.queryTrashed()
+            purgeTrash()
         }
     }
 
     fun loadTrash() {
-        viewModelScope.launch { _trashed.value = repo.queryTrashed() }
+        viewModelScope.launch {
+            _trashed.value = repo.queryTrashed()
+            purgeTrash()
+        }
+    }
+
+    /** Permanently removes items that have sat in the trash longer than the chosen number of days. */
+    private suspend fun purgeTrash() {
+        val days = prefs.value.trashDays
+        if (days <= 0 || !MediaOps.hasAllFiles()) return
+        val cutoff = System.currentTimeMillis() - days * 24L * 3600 * 1000
+        val old = _trashed.value.filter { it.trashedMs in 1 until cutoff }
+        if (old.isEmpty()) return
+        withContext(Dispatchers.IO) {
+            old.forEach { runCatching { getApplication<Application>().contentResolver.delete(it.uri, null, null) } }
+        }
+        _trashed.value = repo.queryTrashed()
+    }
+
+    fun emptyTrash() {
+        val all = _trashed.value
+        if (all.isEmpty()) message("Trash is already empty") else requestDeleteForever(all)
+    }
+
+    // ---- album management -------------------------------------------------
+    fun togglePin(album: Album) {
+        viewModelScope.launch { g.settings.setPinned(album.bucketId, album.bucketId !in prefs.value.pinned) }
+    }
+
+    fun setHidden(album: Album, hidden: Boolean) {
+        viewModelScope.launch { g.settings.setHidden(album.bucketId, hidden) }
+        message(if (hidden) "Hid \"${album.name}\" — find it under Hidden albums" else "\"${album.name}\" is visible again")
+    }
+
+    fun renameAlbum(album: Album, newName: String) {
+        val clean = newName.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        if (clean.isBlank() || clean == album.name) return
+        if (!MediaOps.hasAllFiles()) {
+            message("Renaming an album needs All files access (Settings > Permissions)")
+            return
+        }
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val dir = MediaOps.albumAbsDir(app, album)
+            if (dir == null) {
+                message("Couldn't find that album's folder")
+                return@launch
+            }
+            val list = repo.items.value.filter { it.bucketId == album.bucketId }
+            val err = MediaOps.renameFolder(app, list, dir, clean)
+            if (err != null) {
+                message(err)
+            } else {
+                // The album gets a new bucket id, so carry pin/hide over is not possible; drop the old ones.
+                g.settings.setPinned(album.bucketId, false)
+                g.settings.setHidden(album.bucketId, false)
+                refresh()
+                message("Renamed to $clean")
+            }
+        }
+    }
+
+    fun deleteAlbum(album: Album) {
+        val list = repo.items.value.filter { it.bucketId == album.bucketId }
+        requestTrash(list)
     }
 
     fun startObserving() = repo.startObserving(viewModelScope)
