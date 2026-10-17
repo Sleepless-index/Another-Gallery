@@ -89,7 +89,11 @@ import androidx.media3.common.C
 import androidx.media3.common.MimeTypes
 import dev.vibe.gallery.data.MediaItem
 import dev.vibe.gallery.data.MediaOps
-import dev.vibe.gallery.data.PlayMode
+import dev.vibe.gallery.data.LoopMode
+import dev.vibe.gallery.PlaybackService
+import dev.vibe.gallery.util.shareItems
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
@@ -175,12 +179,6 @@ private fun SkipButton(icon: ImageVector, desc: String, enabled: Boolean, onClic
     }
 }
 
-/** Set when one video hands over to another (Next / Previous / auto-advance) so the new one starts playing. */
-private object PlayerHandoff {
-    var autoStart = false
-    var activeId = Long.MIN_VALUE
-}
-
 private fun subtitleConfig(uri: android.net.Uri, name: String): ExoMediaItem.SubtitleConfiguration {
     val lower = name.lowercase(Locale.US)
     val mime = when {
@@ -207,10 +205,17 @@ private fun findSiblingSubtitles(context: Context, item: MediaItem): List<ExoMed
     }
 }
 
+private fun exoItemFor(v: MediaItem, subs: List<ExoMediaItem.SubtitleConfiguration>): ExoMediaItem =
+    ExoMediaItem.Builder()
+        .setUri(v.uri)
+        .setMediaId(v.id.toString())
+        .setSubtitleConfigurations(subs)
+        .build()
+
 @Composable
 fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenVideo: (Long) -> Unit) {
-    val item = remember(itemId) { vm.findItem(itemId) }
-    if (item == null) {
+    val startItem = remember(itemId) { vm.findItem(itemId) }
+    if (startItem == null) {
         LaunchedEffect(Unit) { onBack() }
         Box(Modifier.fillMaxSize().background(Color.Black))
         return
@@ -223,51 +228,72 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     val cs = MaterialTheme.colorScheme
     val config = LocalConfiguration.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    // Subtitle files loaded by the user (or found next to the video), kept so adding one keeps the rest.
-    var extSubs by remember {
-        mutableStateOf(
-            if (item.id >= 0 && MediaOps.hasAllFiles()) findSiblingSubtitles(context, item) else emptyList(),
-        )
+
+    // The queue: every video in the list the viewer was opened from. ExoPlayer holds all of it,
+    // so next / previous / loop / shuffle keep working with the screen off.
+    val queue = remember(itemId) {
+        val vids = vm.viewerList.value.filter { it.isVideo }
+        if (vids.any { it.id == startItem.id }) vids else listOf(startItem)
     }
+    val startIdx = remember(queue) { queue.indexOfFirst { it.id == startItem.id }.coerceAtLeast(0) }
+    var curIdx by remember { mutableIntStateOf(startIdx) }
+    val item = queue.getOrElse(curIdx) { startItem }
+
+    // Subtitle files loaded by the user (or found next to the video), per video.
+    val subsById = remember { mutableMapOf<Long, List<ExoMediaItem.SubtitleConfiguration>>() }
 
     val player = remember {
         val factory = DefaultRenderersFactory(context).setEnableDecoderFallback(true)
-        ExoPlayer.Builder(context, factory).build().apply {
-            setMediaItem(
-                ExoMediaItem.Builder()
-                    .setUri(item.uri)
-                    .setSubtitleConfigurations(extSubs)
+        ExoPlayer.Builder(context, factory)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
                     .build(),
+                true,
             )
-            playWhenReady = false
-            prepare()
-        }
+            .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .build()
+            .apply {
+                val subs = if (startItem.id >= 0 && MediaOps.hasAllFiles()) findSiblingSubtitles(context, startItem) else emptyList()
+                subsById[startItem.id] = subs
+                setMediaItems(
+                    queue.mapIndexed { i, v -> exoItemFor(v, if (i == startIdx) subs else emptyList()) },
+                    startIdx,
+                    C.TIME_UNSET,
+                )
+                playWhenReady = false
+                prepare()
+            }
     }
 
     val subtitlePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            val name = uri.lastPathSegment?.substringAfterLast('/') ?: "Subtitles"
-            val cfg = subtitleConfig(uri, name)
-            val keep = extSubs.filter { it.uri != uri }
-            extSubs = keep + cfg
-            val pos = player.currentPosition
-            val wasPlaying = player.playWhenReady
-            player.setMediaItem(
-                ExoMediaItem.Builder().setUri(item.uri).setSubtitleConfigurations(extSubs).build(),
-                pos,
-            )
-            player.prepare()
-            player.playWhenReady = wasPlaying
-            player.trackSelectionParameters = player.trackSelectionParameters
-                .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
+            val idx = player.currentMediaItemIndex
+            val cur = queue.getOrNull(idx)
+            if (cur != null) {
+                val name = uri.lastPathSegment?.substringAfterLast('/') ?: "Subtitles"
+                val list = (subsById[cur.id] ?: emptyList()).filter { it.uri != uri } + subtitleConfig(uri, name)
+                subsById[cur.id] = list
+                val pos = player.currentPosition
+                val was = player.playWhenReady
+                player.replaceMediaItem(idx, exoItemFor(cur, list))
+                player.seekTo(idx, pos)
+                player.playWhenReady = was
+                player.trackSelectionParameters = player.trackSelectionParameters
+                    .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
+            }
         }
     }
+
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     // ---- state ----------------------------------------------------------
     var isPlaying by remember { mutableStateOf(false) }
     var ended by remember { mutableStateOf(false) }
     var position by remember { mutableLongStateOf(0L) }
-    var duration by remember { mutableLongStateOf(item.durationMs) }
+    var duration by remember { mutableLongStateOf(startItem.durationMs) }
     var tracks by remember { mutableStateOf(Tracks.EMPTY) }
     var error by remember { mutableStateOf<String?>(null) }
     var controls by remember { mutableStateOf(true) }
@@ -281,31 +307,19 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     var speedMenu by remember { mutableStateOf(false) }
     var audioMenu by remember { mutableStateOf(false) }
     var subsMenu by remember { mutableStateOf(false) }
-    var playlistMenu by remember { mutableStateOf(false) }
+    var menuDialog by remember { mutableStateOf(false) }
+    var queueSheet by remember { mutableStateOf(false) }
+    var mirror by remember { mutableStateOf(false) }
+    var timerMin by remember { mutableIntStateOf(0) }
+    var navTick by remember { mutableIntStateOf(0) }
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
-    val menuOpen = speedMenu || audioMenu || subsMenu || playlistMenu
+    val menuOpen = speedMenu || audioMenu || subsMenu || menuDialog || queueSheet
     var lastHud by remember { mutableStateOf<Hud?>(null) }
     if (hud != null) lastHud = hud
 
-    // Previous / next video in the list the viewer was opened from.
-    val viewerList by vm.viewerList.collectAsStateWithLifecycle()
-    val videoList = remember(viewerList, itemId) { viewerList.filter { it.isVideo } }
-    val videoIdx = videoList.indexOfFirst { it.id == itemId }
-    val prevVideo = if (videoIdx > 0) videoList[videoIdx - 1] else null
-    val nextVideo = if (videoIdx >= 0) videoList.getOrNull(videoIdx + 1) else null
-
-    // The Next button / auto-advance: random pick in shuffle mode, otherwise the following video.
-    fun pickNext(): MediaItem? = when {
-        prefs.playMode == PlayMode.SHUFFLE && videoList.size > 1 ->
-            videoList.filter { it.id != itemId }.randomOrNull()
-        else -> nextVideo
-    }
-
-    fun openVideo(target: MediaItem) {
-        PlayerHandoff.autoStart = true
-        onOpenVideo(target.id)
-    }
+    val hasNext = remember(navTick, curIdx) { player.hasNextMediaItem() }
+    val hasPrev = remember(navTick, curIdx) { player.hasPreviousMediaItem() }
 
     val audio = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val maxVol = remember { audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
@@ -338,7 +352,9 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
         if (player.isPlaying) {
             player.pause()
         } else {
-            if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
+            val atEnd = player.playbackState == Player.STATE_ENDED ||
+                (player.duration > 0 && player.currentPosition >= player.duration - 300)
+            if (atEnd) player.seekTo(player.currentMediaItemIndex, 0)
             player.play()
         }
     }
@@ -358,10 +374,55 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
+                if (!playing && !player.playWhenReady) PlaybackService.stop(context)
             }
 
             override fun onTracksChanged(t: Tracks) {
                 tracks = t
+            }
+
+            override fun onMediaItemTransition(mediaItem: ExoMediaItem?, reason: Int) {
+                val idx = player.currentMediaItemIndex
+                curIdx = idx
+                navTick++
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
+                    val next = queue.getOrNull(idx) ?: return
+                    position = 0L
+                    duration = next.durationMs
+                    ended = false
+                    if (next.id >= 0 && prefs.resume) {
+                        scope.launch {
+                            val saved = vm.resumePosition(next.id)
+                            if (saved != null && saved > 3000 && player.currentMediaItemIndex == idx && player.currentPosition < 2000) {
+                                player.seekTo(saved)
+                            }
+                        }
+                    }
+                    if (prefs.bgPlay && player.playWhenReady) PlaybackService.start(context, next.name)
+                }
+            }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int,
+            ) {
+                if (oldPosition.mediaItemIndex != newPosition.mediaItemIndex) {
+                    val old = queue.getOrNull(oldPosition.mediaItemIndex)
+                    if (old != null && old.id >= 0) vm.saveResume(old.id, oldPosition.positionMs, old.durationMs)
+                }
+            }
+
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) controls = true
+            }
+
+            override fun onRepeatModeChanged(repeatMode: Int) {
+                navTick++
+            }
+
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                navTick++
             }
 
             override fun onPlaybackStateChanged(state: Int) {
@@ -369,9 +430,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                 ended = state == Player.STATE_ENDED
                 if (ended) {
                     controls = true
-                    if (prefs.playMode == PlayMode.NEXT || prefs.playMode == PlayMode.SHUFFLE) {
-                        pickNext()?.let { openVideo(it) }
-                    }
+                    PlaybackService.stop(context)
                 }
             }
 
@@ -384,25 +443,56 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     }
 
     LaunchedEffect(Unit) {
-        if (prefs.resume && item.id >= 0) {
-            val saved = vm.resumePosition(item.id)
-            if (saved != null && saved > 3000) player.seekTo(saved)
+        if (prefs.resume && startItem.id >= 0) {
+            val saved = vm.resumePosition(startItem.id)
+            if (saved != null && saved > 3000) player.seekTo(startIdx, saved)
         }
-        player.playWhenReady = prefs.autoplay || PlayerHandoff.autoStart
-        PlayerHandoff.autoStart = false
+        player.playWhenReady = prefs.autoplay
     }
 
-    // Loop mode repeats the current video; the other modes play it once.
-    LaunchedEffect(prefs.playMode) {
-        player.repeatMode = if (prefs.playMode == PlayMode.LOOP) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+    // Queue behaviour: loop (off / one / all), shuffle, and whether a finished video moves on to the next.
+    LaunchedEffect(prefs.loop, prefs.shuffle, prefs.autoNext) {
+        player.repeatMode = when (prefs.loop) {
+            LoopMode.OFF -> Player.REPEAT_MODE_OFF
+            LoopMode.ONE -> Player.REPEAT_MODE_ONE
+            LoopMode.ALL -> Player.REPEAT_MODE_ALL
+        }
+        player.shuffleModeEnabled = prefs.shuffle
+        player.pauseAtEndOfMediaItems = !(prefs.autoNext || prefs.shuffle || prefs.loop == LoopMode.ALL)
+        navTick++
+    }
+
+    // Each video opens in the orientation that suits it.
+    LaunchedEffect(curIdx) {
+        activity?.requestedOrientation = if (item.width >= item.height) {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+        }
+    }
+
+    // Sleep timer.
+    LaunchedEffect(timerMin) {
+        if (timerMin > 0) {
+            delay(timerMin * 60_000L)
+            player.pause()
+            timerMin = 0
+        }
+    }
+
+    // Background play keeps a notification (and so the process) alive while playing.
+    LaunchedEffect(prefs.bgPlay, isPlaying) {
+        if (prefs.bgPlay && isPlaying) PlaybackService.start(context, item.name)
+        if (!prefs.bgPlay) PlaybackService.stop(context)
     }
 
     // Keep this video's position fresh so it survives the app being killed or switching videos.
     LaunchedEffect(player) {
         while (true) {
             delay(5000)
-            if (player.isPlaying && item.id >= 0) {
-                vm.saveResume(item.id, player.currentPosition, player.duration.coerceAtLeast(0))
+            val cur = queue.getOrNull(player.currentMediaItemIndex)
+            if (player.isPlaying && cur != null && cur.id >= 0) {
+                vm.saveResume(cur.id, player.currentPosition, player.duration.coerceAtLeast(0))
             }
         }
     }
@@ -430,7 +520,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) player.pause()
+            if (event == Lifecycle.Event.ON_STOP && !prefs.bgPlay) player.pause()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -446,20 +536,12 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     }
 
     DisposableEffect(Unit) {
-        PlayerHandoff.activeId = itemId
         val window = activity?.window
         val ctrl = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
         ctrl?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         ctrl?.hide(WindowInsetsCompat.Type.systemBars())
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        activity?.requestedOrientation = if (item.width >= item.height) {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-        }
         onDispose {
-            // When switching videos the new screen is already set up; don't undo its settings.
-            if (PlayerHandoff.activeId != itemId) return@onDispose
             ctrl?.show(WindowInsetsCompat.Type.systemBars())
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -473,7 +555,9 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
 
     DisposableEffect(Unit) {
         onDispose {
-            if (item.id >= 0) vm.saveResume(item.id, player.currentPosition, player.duration.coerceAtLeast(0))
+            val cur = queue.getOrNull(player.currentMediaItemIndex)
+            if (cur != null && cur.id >= 0) vm.saveResume(cur.id, player.currentPosition, player.duration.coerceAtLeast(0))
+            PlaybackService.stop(context)
             player.release()
         }
     }
@@ -496,7 +580,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                     AspectRatioFrameLayout.RESIZE_MODE_FIT
                 }
             },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = if (mirror) -1f else 1f },
         )
 
         // gesture layer
@@ -756,7 +840,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(160.dp)
+                        .height(200.dp)
                         .align(Alignment.BottomCenter)
                         .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xD1000000))))
                 )
@@ -829,38 +913,6 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                     }
                 }
 
-                // center controls
-                Row(
-                    modifier = Modifier.align(Alignment.Center),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(36.dp),
-                ) {
-                    SkipButton(GIcons.SkipPrevious, "Previous video", prevVideo != null) {
-                        prevVideo?.let { openVideo(it) }
-                    }
-                    Box(
-                        Modifier
-                            .size(72.dp)
-                            .clip(CircleShape)
-                            .background(cs.primary)
-                            .bounceClick(onClick = { togglePlay(); interaction++ }),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Crossfade(targetState = isPlaying, animationSpec = tween(160), label = "playPause") { playing ->
-                            Icon(
-                                imageVector = if (playing) GIcons.Pause else GIcons.Play,
-                                contentDescription = if (playing) "Pause" else "Play",
-                                tint = cs.onPrimary,
-                                modifier = Modifier.size(30.dp),
-                            )
-                        }
-                    }
-
-                    SkipButton(GIcons.SkipNext, "Next video", pickNext() != null) {
-                        pickNext()?.let { openVideo(it) }
-                    }
-                }
-
                 // bottom bar
                 AnimatedVisibility(
                     visible = showControls,
@@ -916,17 +968,11 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                 modifier = Modifier.width(44.dp),
                             )
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(end = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
+                        val landNow = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+                        val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+
+                        val leftChips: @Composable () -> Unit = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 PlayerChip("Lock", GIcons.Lock) {
                                     locked = true
                                     controls = false
@@ -936,76 +982,85 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                         speedMenu = true
                                     }
                                     DropdownMenu(expanded = speedMenu, onDismissRequest = { speedMenu = false }) {
-                                        listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { s ->
+                                        listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { sp ->
                                             CompactMenuItem(
-                                                text = { Text("${s}x") },
+                                                text = { Text("${sp}x") },
                                                 onClick = {
                                                     speedMenu = false
-                                                    speed = s
-                                                    player.setPlaybackSpeed(s)
+                                                    speed = sp
+                                                    player.setPlaybackSpeed(sp)
                                                 },
                                             )
                                         }
                                     }
                                 }
-                                Box(Modifier.weight(1f, fill = false)) {
-                                    val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-                                    val selectedIdx = audioGroups.indexOfFirst { it.isSelected }
-                                    PlayerChip(
-                                        text = if (selectedIdx >= 0) trackLabel(audioGroups[selectedIdx], selectedIdx, "Audio") else "Audio",
-                                        icon = GIcons.Audio,
-                                    ) { audioMenu = true }
-                                    DropdownMenu(expanded = audioMenu, onDismissRequest = { audioMenu = false }) {
-                                        audioGroups.forEachIndexed { i, g ->
-                                            CompactMenuItem(
-                                                text = { Text(trackLabel(g, i, "Audio")) },
-                                                onClick = {
-                                                    audioMenu = false
-                                                    player.trackSelectionParameters = player.trackSelectionParameters
-                                                        .buildUpon()
-                                                        .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0))
-                                                        .build()
-                                                },
-                                            )
-                                        }
-                                        if (audioGroups.isEmpty()) {
-                                            CompactMenuItem(text = { Text("No audio tracks") }, enabled = false, onClick = {})
+                                // Only worth showing when the file really has several audio tracks.
+                                if (audioGroups.size > 1) {
+                                    Box {
+                                        val selectedIdx = audioGroups.indexOfFirst { it.isSelected }
+                                        PlayerChip(
+                                            text = "Audio ${selectedIdx.coerceAtLeast(0) + 1}",
+                                            icon = GIcons.Audio,
+                                        ) { audioMenu = true }
+                                        DropdownMenu(expanded = audioMenu, onDismissRequest = { audioMenu = false }) {
+                                            audioGroups.forEachIndexed { i, g ->
+                                                CompactMenuItem(
+                                                    text = { Text(trackLabel(g, i, "Audio")) },
+                                                    onClick = {
+                                                        audioMenu = false
+                                                        player.trackSelectionParameters = player.trackSelectionParameters
+                                                            .buildUpon()
+                                                            .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0))
+                                                            .build()
+                                                    },
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                val landNow = config.orientation == Configuration.ORIENTATION_LANDSCAPE
-                                Box {
-                                    RoundChrome(
-                                        when (prefs.playMode) {
-                                            PlayMode.LOOP -> GIcons.Repeat
-                                            PlayMode.SHUFFLE -> GIcons.Shuffle
-                                            else -> GIcons.Playlist
-                                        },
-                                        "Playback mode",
-                                        36,
-                                    ) { playlistMenu = true }
-                                    DropdownMenu(expanded = playlistMenu, onDismissRequest = { playlistMenu = false }) {
-                                        listOf(
-                                            PlayMode.ONCE to "Play once",
-                                            PlayMode.NEXT to "Play next video",
-                                            PlayMode.LOOP to "Loop this video",
-                                            PlayMode.SHUFFLE to "Shuffle",
-                                        ).forEach { (mode, label) ->
-                                            CompactMenuItem(
-                                                text = { Text(if (prefs.playMode == mode) "✓  $label" else "     $label") },
-                                                onClick = {
-                                                    playlistMenu = false
-                                                    vm.setPlayMode(mode)
-                                                },
-                                            )
-                                        }
+                        }
+
+                        val transport: @Composable () -> Unit = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                SkipButton(GIcons.SkipPrevious, "Previous video", hasPrev) {
+                                    player.seekToPreviousMediaItem()
+                                    player.play()
+                                    interaction++
+                                }
+                                Box(
+                                    Modifier
+                                        .size(52.dp)
+                                        .clip(CircleShape)
+                                        .background(cs.primary)
+                                        .bounceClick(onClick = { togglePlay(); interaction++ }),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Crossfade(targetState = isPlaying, animationSpec = tween(160), label = "playPause") { playing ->
+                                        Icon(
+                                            imageVector = if (playing) GIcons.Pause else GIcons.Play,
+                                            contentDescription = if (playing) "Pause" else "Play",
+                                            tint = cs.onPrimary,
+                                            modifier = Modifier.size(24.dp),
+                                        )
                                     }
                                 }
+                                SkipButton(GIcons.SkipNext, "Next video", hasNext) {
+                                    player.seekToNextMediaItem()
+                                    player.play()
+                                    interaction++
+                                }
+                            }
+                        }
+
+                        val rightButtons: @Composable () -> Unit = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                RoundChrome(GIcons.More, "Player menu", 36) { menuDialog = true }
                                 RoundChrome(GIcons.ScreenRotate, "Rotate screen", 36) {
-                                    val land = landNow
-                                    activity?.requestedOrientation = if (land) {
+                                    activity?.requestedOrientation = if (landNow) {
                                         ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
                                     } else {
                                         ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -1014,9 +1069,100 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                 RoundChrome(GIcons.Fit, "Fit or fill screen", 36) { fill = !fill }
                             }
                         }
+
+                        if (landNow) {
+                            Box(Modifier.fillMaxWidth()) {
+                                Box(Modifier.align(Alignment.CenterStart)) { leftChips() }
+                                Box(Modifier.align(Alignment.Center)) { transport() }
+                                Box(Modifier.align(Alignment.CenterEnd)) { rightButtons() }
+                            }
+                        } else {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { transport() }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                leftChips()
+                                rightButtons()
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    fun cycleLoop() {
+        val next = when (prefs.loop) {
+            LoopMode.OFF -> LoopMode.ONE
+            LoopMode.ONE -> LoopMode.ALL
+            LoopMode.ALL -> LoopMode.OFF
+        }
+        vm.setLoop(next)
+        hud = Hud(
+            GIcons.Repeat,
+            when (next) {
+                LoopMode.OFF -> "Loop off"
+                LoopMode.ONE -> "Loop this video"
+                LoopMode.ALL -> "Loop all"
+            },
+        )
+    }
+
+    if (menuDialog) {
+        PlayerMenuDialog(
+            bgPlay = prefs.bgPlay,
+            loop = prefs.loop,
+            shuffle = prefs.shuffle,
+            autoNext = prefs.autoNext,
+            timerMin = timerMin,
+            mirror = mirror,
+            onBgPlay = {
+                val on = !prefs.bgPlay
+                vm.setBgPlay(on)
+                if (on && Build.VERSION.SDK_INT >= 33) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                hud = Hud(GIcons.Headphones, if (on) "Background play on" else "Background play off")
+            },
+            onQueue = { queueSheet = true },
+            onLoop = { cycleLoop() },
+            onShuffle = {
+                vm.setShuffle(!prefs.shuffle)
+                hud = Hud(GIcons.Shuffle, if (!prefs.shuffle) "Shuffle on" else "Shuffle off")
+            },
+            onAutoNext = {
+                vm.setAutoNext(!prefs.autoNext)
+                hud = Hud(GIcons.FastForward, if (!prefs.autoNext) "Autoplay next on" else "Autoplay next off")
+            },
+            onTimer = {
+                timerMin = when (timerMin) {
+                    0 -> 15
+                    15 -> 30
+                    30 -> 60
+                    else -> 0
+                }
+                hud = Hud(GIcons.Timer, if (timerMin > 0) "Sleep in $timerMin min" else "Timer off")
+            },
+            onMirror = { mirror = !mirror },
+            onShare = { shareItems(context, listOf(item)) },
+            onDismiss = { menuDialog = false },
+        )
+    }
+
+    if (queueSheet) {
+        QueueSheet(
+            queue = queue,
+            currentIndex = curIdx,
+            loop = prefs.loop,
+            shuffle = prefs.shuffle,
+            onLoop = { cycleLoop() },
+            onShuffle = { vm.setShuffle(!prefs.shuffle) },
+            onPick = { i ->
+                queueSheet = false
+                player.seekTo(i, 0L)
+                player.play()
+            },
+            onDismiss = { queueSheet = false },
+        )
     }
 }

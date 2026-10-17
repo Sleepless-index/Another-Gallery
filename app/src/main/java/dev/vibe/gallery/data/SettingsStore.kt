@@ -14,8 +14,8 @@ enum class LayoutMode { GRID, MASONRY }
 
 enum class ThemeMode { AMOLED, DARK, LIGHT }
 
-/** What happens when a video ends. */
-enum class PlayMode { ONCE, NEXT, LOOP, SHUFFLE }
+/** Repeat behaviour of the player queue. */
+enum class LoopMode { OFF, ONE, ALL }
 
 
 data class Prefs(
@@ -26,7 +26,10 @@ data class Prefs(
     val resume: Boolean = true,
     val autoplay: Boolean = true,
     val blur: Boolean = true,
-    val playMode: PlayMode = PlayMode.ONCE,
+    val loop: LoopMode = LoopMode.OFF,
+    val shuffle: Boolean = false,
+    val autoNext: Boolean = false,
+    val bgPlay: Boolean = false,
     val trashDays: Int = 30,
     val pinned: Set<Long> = emptySet(),
     val hidden: Set<Long> = emptySet(),
@@ -51,7 +54,10 @@ class SettingsStore(private val context: Context) {
     private val kResume = booleanPreferencesKey("resume")
     private val kAutoplay = booleanPreferencesKey("autoplay")
     private val kBlur = booleanPreferencesKey("blur")
-    private val kPlayMode = stringPreferencesKey("playMode")
+    private val kLoop = stringPreferencesKey("loopMode")
+    private val kShuffle = booleanPreferencesKey("shuffle")
+    private val kAutoNext = booleanPreferencesKey("autoNext")
+    private val kBgPlay = booleanPreferencesKey("bgPlay")
     private val kTrashDays = intPreferencesKey("trashDays")
     private val kPinned = stringSetPreferencesKey("pinnedAlbums")
     private val kHidden = stringSetPreferencesKey("hiddenAlbums")
@@ -65,7 +71,10 @@ class SettingsStore(private val context: Context) {
             resume = p[kResume] ?: true,
             autoplay = p[kAutoplay] ?: true,
             blur = p[kBlur] ?: true,
-            playMode = runCatching { PlayMode.valueOf(p[kPlayMode] ?: "ONCE") }.getOrDefault(PlayMode.ONCE),
+            loop = runCatching { LoopMode.valueOf(p[kLoop] ?: "OFF") }.getOrDefault(LoopMode.OFF),
+            shuffle = p[kShuffle] ?: false,
+            autoNext = p[kAutoNext] ?: false,
+            bgPlay = p[kBgPlay] ?: false,
             trashDays = p[kTrashDays] ?: 30,
             pinned = (p[kPinned] ?: emptySet()).mapNotNull { it.toLongOrNull() }.toSet(),
             hidden = (p[kHidden] ?: emptySet()).mapNotNull { it.toLongOrNull() }.toSet(),
@@ -80,7 +89,10 @@ class SettingsStore(private val context: Context) {
     suspend fun setAutoplay(v: Boolean) { context.dataStore.edit { it[kAutoplay] = v } }
     suspend fun setBlur(v: Boolean) { context.dataStore.edit { it[kBlur] = v } }
 
-    suspend fun setPlayMode(v: PlayMode) { context.dataStore.edit { it[kPlayMode] = v.name } }
+    suspend fun setLoop(v: LoopMode) { context.dataStore.edit { it[kLoop] = v.name } }
+    suspend fun setShuffle(v: Boolean) { context.dataStore.edit { it[kShuffle] = v } }
+    suspend fun setAutoNext(v: Boolean) { context.dataStore.edit { it[kAutoNext] = v } }
+    suspend fun setBgPlay(v: Boolean) { context.dataStore.edit { it[kBgPlay] = v } }
     suspend fun setTrashDays(v: Int) { context.dataStore.edit { it[kTrashDays] = v } }
 
     suspend fun setPinned(id: Long, on: Boolean) {

@@ -169,6 +169,13 @@ object GIcons {
     val FastRewind: ImageVector by lazy {
         IconBuilder("FastRewind").f("M 20.5 6 v 12 l -8 -6 z M 11.5 6 v 12 l -8 -6 z").build()
     }
+    val Headphones: ImageVector by lazy {
+        IconBuilder("Headphones").s("M 4 15 v -3 a 8 8 0 0 1 16 0 v 3")
+            .s(rrect(3.5f, 14f, 4f, 6.5f, 1.6f)).s(rrect(16.5f, 14f, 4f, 6.5f, 1.6f)).build()
+    }
+    val Timer: ImageVector by lazy {
+        IconBuilder("Timer").s(circle(12f, 13.5f, 7.5f)).s("M 12 13.5 V 9.5 M 10 3 h 4 M 18.6 6.4 l 1.4 -1.4").build()
+    }
     val Playlist: ImageVector by lazy {
         IconBuilder("Playlist").s("M 4 7 h 11 M 4 12 h 7 M 4 17 h 7").f("M 15 11 v 8 l 6 -4 z").build()
     }
