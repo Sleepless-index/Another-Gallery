@@ -163,6 +163,12 @@ object GIcons {
             .s(arcArrow(9.2, 20.0, 70.0))
             .build()
     }
+    val FastForward: ImageVector by lazy {
+        IconBuilder("FastForward").f("M 3.5 6 v 12 l 8 -6 z M 12.5 6 v 12 l 8 -6 z").build()
+    }
+    val FastRewind: ImageVector by lazy {
+        IconBuilder("FastRewind").f("M 20.5 6 v 12 l -8 -6 z M 11.5 6 v 12 l -8 -6 z").build()
+    }
     val Playlist: ImageVector by lazy {
         IconBuilder("Playlist").s("M 4 7 h 11 M 4 12 h 7 M 4 17 h 7").f("M 15 11 v 8 l 6 -4 z").build()
     }

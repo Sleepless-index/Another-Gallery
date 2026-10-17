@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -177,6 +178,7 @@ private fun SkipButton(icon: ImageVector, desc: String, enabled: Boolean, onClic
 /** Set when one video hands over to another (Next / Previous / auto-advance) so the new one starts playing. */
 private object PlayerHandoff {
     var autoStart = false
+    var activeId = Long.MIN_VALUE
 }
 
 private fun subtitleConfig(uri: android.net.Uri, name: String): ExoMediaItem.SubtitleConfiguration {
@@ -444,6 +446,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     }
 
     DisposableEffect(Unit) {
+        PlayerHandoff.activeId = itemId
         val window = activity?.window
         val ctrl = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
         ctrl?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -455,6 +458,8 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
         }
         onDispose {
+            // When switching videos the new screen is already set up; don't undo its settings.
+            if (PlayerHandoff.activeId != itemId) return@onDispose
             ctrl?.show(WindowInsetsCompat.Type.systemBars())
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -522,10 +527,10 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                             onDoubleTap = { o ->
                                 if (o.x < size.width / 2f) {
                                     seekBy(-10_000)
-                                    hud = Hud(GIcons.RotateLeft, "-10s", null, -1)
+                                    hud = Hud(GIcons.FastRewind, "10s", null, -1)
                                 } else {
                                     seekBy(10_000)
-                                    hud = Hud(GIcons.Rotate, "+10s", null, 1)
+                                    hud = Hud(GIcons.FastForward, "10s", null, 1)
                                 }
                             },
                         )
@@ -583,7 +588,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                         volAccum = (volAccum - drag.y / size.height * maxVol * 1.2f)
                                             .coerceIn(0f, maxVol.toFloat())
                                         audio.setStreamVolume(AudioManager.STREAM_MUSIC, volAccum.roundToInt(), 0)
-                                        hud = Hud(GIcons.Volume, "${volAccum.roundToInt()}/$maxVol", volAccum / maxVol, 1)
+                                        hud = Hud(GIcons.Volume, "${(volAccum / maxVol * 100).roundToInt()}%", volAccum / maxVol, 1)
                                     }
                                     else -> {}
                                 }
@@ -642,26 +647,41 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                 modifier = Modifier
                     .align(if (side < 0) Alignment.CenterStart else Alignment.CenterEnd)
                     .displayCutoutPadding()
-                    .padding(horizontal = 36.dp),
+                    .padding(horizontal = 28.dp),
                 enter = fadeIn(tween(120)) + scaleIn(tween(160), initialScale = 0.85f),
                 exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.9f),
             ) {
                 val h = lastHud
-                if (h != null && h.side == side) {
+                if (h != null && h.side == side && h.fraction == null) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(PlayerChrome)
+                            .width(92.dp)
+                            .padding(vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(h.icon, contentDescription = null, tint = cs.primary, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(h.text, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, softWrap = false)
+                    }
+                } else if (h != null && h.side == side) {
                     Column(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(26.dp))
+                            .clip(RoundedCornerShape(22.dp))
                             .background(PlayerChrome)
-                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                            .width(if (h.fraction != null) 58.dp else 72.dp)
+                            .padding(vertical = 14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Icon(h.icon, contentDescription = null, tint = cs.primary, modifier = Modifier.size(22.dp))
                         if (h.fraction != null) {
                             Box(
                                 Modifier
                                     .width(5.dp)
-                                    .height(96.dp)
+                                    .height(88.dp)
                                     .clip(CircleShape)
                                     .background(Color.White.copy(alpha = 0.25f)),
                                 contentAlignment = Alignment.BottomCenter,
@@ -674,7 +694,16 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                 )
                             }
                         }
-                        Text(h.text, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(
+                            h.text,
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            softWrap = false,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.width(44.dp),
+                        )
                     }
                 }
             }
@@ -860,7 +889,9 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                     scrubValue = it
                                 },
                                 onValueChangeFinished = {
-                                    player.seekTo((scrubValue * duration).toLong())
+                                    val target = (scrubValue * duration).toLong()
+                                    player.seekTo(target)
+                                    position = target
                                     scrubbing = false
                                     interaction++
                                 },
