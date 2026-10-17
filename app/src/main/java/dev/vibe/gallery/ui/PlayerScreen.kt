@@ -696,20 +696,11 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                 Row(
                     modifier = Modifier.align(Alignment.Center),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(36.dp),
                 ) {
                     SkipButton(GIcons.SkipPrevious, "Previous video", prevVideo != null) {
                         prevVideo?.let { onOpenVideo(it.id) }
                     }
-                    Box(
-                        Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(PlayerChrome)
-                            .bounceClick(onClick = { seekBy(-10_000); interaction++ }),
-                        contentAlignment = Alignment.Center,
-                    ) { Text("-10", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold) }
-
                     Box(
                         Modifier
                             .size(72.dp)
@@ -728,14 +719,6 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                         }
                     }
 
-                    Box(
-                        Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(PlayerChrome)
-                            .bounceClick(onClick = { seekBy(10_000); interaction++ }),
-                        contentAlignment = Alignment.Center,
-                    ) { Text("+10", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold) }
                     SkipButton(GIcons.SkipNext, "Next video", nextVideo != null) {
                         nextVideo?.let { onOpenVideo(it.id) }
                     }
@@ -772,6 +755,14 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                     player.seekTo((scrubValue * duration).toLong())
                                     scrubbing = false
                                     interaction++
+                                },
+                                thumb = {
+                                    Box(
+                                        Modifier
+                                            .size(width = 4.dp, height = 22.dp)
+                                            .clip(CircleShape)
+                                            .background(cs.primary)
+                                    )
                                 },
                                 colors = SliderDefaults.colors(
                                     thumbColor = cs.primary,
@@ -845,8 +836,10 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                 }
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                RoundChrome(GIcons.ScreenRotate, "Rotate screen", 36) {
-                                    val land = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+                                val landNow = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+                                // The icon shows the orientation you will switch to.
+                                RoundChrome(if (landNow) GIcons.RotateToPortrait else GIcons.RotateToLandscape, "Rotate screen", 36) {
+                                    val land = landNow
                                     activity?.requestedOrientation = if (land) {
                                         ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
                                     } else {

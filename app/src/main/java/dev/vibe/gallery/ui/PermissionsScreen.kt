@@ -86,11 +86,11 @@ fun PermissionsScreen(
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp),
             ) {
                 Text(
                     "Permissions",
-                    fontSize = 30.sp,
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = cs.onBackground,
                     textAlign = TextAlign.Center,
@@ -98,10 +98,10 @@ fun PermissionsScreen(
                 )
                 Text(
                     "Gallery only uses what it needs to show and manage your media. Tap a permission to learn why.",
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     color = cs.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
                 )
                 PermCard(
                     icon = GIcons.Image,
@@ -145,15 +145,15 @@ fun PermissionsScreen(
             }
             Text(
                 label,
-                fontSize = 17.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = cs.onPrimary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 14.dp)
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
-                    .clip(RoundedCornerShape(32.dp))
+                    .clip(RoundedCornerShape(26.dp))
                     .background(cs.primary)
                     .bounceClick(
                         onClick = {
@@ -164,7 +164,7 @@ fun PermissionsScreen(
                             }
                         },
                     )
-                    .padding(vertical = 18.dp),
+                    .padding(vertical = 13.dp),
             )
             if (onBack == null && ready && !state.all) {
                 Text(
@@ -200,26 +200,26 @@ private fun PermCard(
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(cs.surface.copy(alpha = 0.9f))
             .bounceClick(onClick = { open = !open })
-            .padding(horizontal = 16.dp, vertical = 16.dp)
+            .padding(horizontal = 14.dp, vertical = 11.dp)
             .animateContentSize(tween(220)),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Box(
-                Modifier.size(52.dp).clip(CircleShape).background(cs.primary.copy(alpha = 0.22f)),
+                Modifier.size(40.dp).clip(CircleShape).background(cs.primary.copy(alpha = 0.22f)),
                 contentAlignment = Alignment.Center,
-            ) { Icon(icon, null, tint = cs.primary, modifier = Modifier.size(24.dp)) }
+            ) { Icon(icon, null, tint = cs.primary, modifier = Modifier.size(19.dp)) }
             Column(Modifier.weight(1f)) {
-                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = cs.onBackground)
+                Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = cs.onBackground)
                 Text(
                     (if (optional) "Optional · " else "") + if (granted) "Granted" else "Not granted",
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     color = if (granted) cs.primary else cs.onSurfaceVariant,
                 )
             }
-            Icon(GIcons.ChevronDown, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(22.dp).rotate(turn))
+            Icon(GIcons.ChevronDown, null, tint = cs.onSurfaceVariant, modifier = Modifier.size(18.dp).rotate(turn))
         }
         AnimatedVisibility(
             visible = open,
@@ -227,7 +227,7 @@ private fun PermCard(
             exit = shrinkVertically(tween(180)) + fadeOut(tween(120)),
         ) {
             Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(why, fontSize = 13.5.sp, color = cs.onSurfaceVariant)
+                Text(why, fontSize = 12.5.sp, color = cs.onSurfaceVariant)
                 if (!granted) {
                     Text(
                         "Allow",
