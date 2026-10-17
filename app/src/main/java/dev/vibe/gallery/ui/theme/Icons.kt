@@ -113,6 +113,19 @@ object GIcons {
         IconBuilder("SdCard").s("M 8 3 h 6.5 L 19 7.5 V 19 a 2 2 0 0 1 -2 2 H 8 a 2 2 0 0 1 -2 -2 V 5 a 2 2 0 0 1 2 -2 z")
             .s("M 10 7 v 3 M 13 7 v 3 M 16 9 v 1").build()
     }
+    val SkipNext: ImageVector by lazy {
+        IconBuilder("SkipNext").f("M 6 5 v 14 l 9.5 -7 z M 16 5 h 2.2 v 14 H 16 z").build()
+    }
+    val SkipPrevious: ImageVector by lazy {
+        IconBuilder("SkipPrevious").f("M 18 5 v 14 l -9.5 -7 z M 5.8 5 H 8 v 14 H 5.8 z").build()
+    }
+    val ScreenRotate: ImageVector by lazy {
+        IconBuilder("ScreenRotate")
+            .s(rrect(8.5f, 7f, 7f, 10f, 1.8f))
+            .s("M 3.5 10 A 8.5 8.5 0 0 1 12 3.5 M 12 3.5 l -3 -1 M 12 3.5 l -1 3")
+            .s("M 20.5 14 A 8.5 8.5 0 0 1 12 20.5 M 12 20.5 l 3 1 M 12 20.5 l 1 -3")
+            .build()
+    }
     val Unlock: ImageVector by lazy {
         IconBuilder("Unlock").s(rrect(5f, 11f, 14f, 9f, 2.5f)).s("M 8 11 V 8 a 4 4 0 0 1 7.5 -1.5").build()
     }

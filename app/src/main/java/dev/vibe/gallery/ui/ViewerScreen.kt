@@ -27,6 +27,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -61,6 +62,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -399,11 +401,14 @@ internal fun ZoomableImage(
     var imgSize by remember { mutableStateOf(IntSize.Zero) }
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
+    val barsPx by rememberUpdatedState(with(density) { (insetTop + insetBottom).toPx() })
+    // The picture sits between the bars, so its centre is a little off the screen centre.
+    val shiftY by rememberUpdatedState(with(density) { (insetTop - insetBottom).toPx() } / 2f)
 
     // When turned sideways the picture must shrink/grow so it still fits between the bars.
     val fitFactor = run {
         val availW = box.width.toFloat()
-        val availH = (box.height - with(density) { (insetTop + insetBottom).toPx() }).coerceAtLeast(1f)
+        val availH = (box.height - barsPx).coerceAtLeast(1f)
         if (imgSize.width <= 0 || imgSize.height <= 0 || availW <= 0f) {
             1f
         } else {
@@ -416,105 +421,144 @@ internal fun ZoomableImage(
         }
     }
 
+    /** Size the picture takes on screen at [s] zoom and (quarter-turn) rotation [rot]. */
+    fun displayed(rot: Float, s: Float): Pair<Float, Float> {
+        val iw = imgSize.width.toFloat()
+        val ih = imgSize.height.toFloat()
+        if (iw <= 0f || ih <= 0f) return box.width * s to box.height * s
+        val availW = box.width.toFloat()
+        val availH = (box.height - barsPx).coerceAtLeast(1f)
+        val quarter = Math.round(rot / 90f) % 2 != 0
+        val fit = if (quarter) minOf(availW / ih, availH / iw) else minOf(availW / iw, availH / ih)
+        return (if (quarter) ih else iw) * fit * s to (if (quarter) iw else ih) * fit * s
+    }
+
+    /** Keeps the picture covering the screen while zoomed (no empty gaps at the edges). */
+    fun clampOffset(o: Offset, s: Float, rot: Float): Offset {
+        val (w, h) = displayed(rot, s)
+        val vw = box.width.toFloat()
+        val vh = box.height.toFloat()
+        val x = if (w <= vw) 0f else o.x.coerceIn((vw - w) / 2f, (w - vw) / 2f)
+        val y = if (h <= vh) {
+            0f
+        } else {
+            o.y.coerceIn(vh / 2f - h / 2f - shiftY, h / 2f - vh / 2f - shiftY)
+        }
+        return Offset(x, y)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { box = it }
-            // swipe down = close (only while not zoomed)
-            .pointerInput(Unit) {
-                var total = 0f
-                detectVerticalDragGestures(
-                    onDragStart = { total = 0f },
-                    onDragEnd = {
-                        if (scale <= 1.01f) {
-                            if (total > 200f) onSwipeDown()
-                        }
-                        total = 0f
-                    },
-                    onDragCancel = { total = 0f },
-                    onVerticalDrag = { _, dy -> total += dy },
-                )
-            }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { onTap() },
-                    onDoubleTap = {
+                    onDoubleTap = { tap ->
+                        // Double-tap zooms in on the spot you tapped (or back out).
+                        val c = tap - Offset(box.width / 2f, box.height / 2f + shiftY)
                         scope.launch {
-                            val from = scale
-                            val to = if (from > 1.05f) 1f else 3f
-                            val fromOffset = offset
+                            val fromS = scale
+                            val fromO = offset
+                            val toS = if (fromS > 1.05f) 1f else 3f
+                            val toO = if (toS == 1f) Offset.Zero else clampOffset(c - (c - fromO) * (toS / fromS), toS, rotation)
                             animate(
-                                initialValue = from,
-                                targetValue = to,
+                                initialValue = 0f,
+                                targetValue = 1f,
                                 animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
-                            ) { v, _ ->
-                                scale = v
-                                offset = if (to == 1f) {
-                                    val t = if (from > 1f) (v - 1f) / (from - 1f) else 0f
-                                    Offset(fromOffset.x * t, fromOffset.y * t)
-                                } else {
-                                    Offset.Zero
-                                }
+                            ) { t, _ ->
+                                scale = fromS + (toS - fromS) * t
+                                offset = Offset(fromO.x + (toO.x - fromO.x) * t, fromO.y + (toO.y - fromO.y) * t)
                             }
                         }
                     },
                 )
             }
-            // pinch to zoom + pan while zoomed; at 1x we don't consume so the pager can swipe
+            // Two fingers: zoom + (deliberate) twist around the point between them.
+            // One finger: pan while zoomed, hand over to the pager at the edges, swipe down to close.
             .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
                     var twisted = false
                     var twistRaw = 0f
+                    var everMulti = false
+                    var totalPan = Offset.Zero
                     do {
                         val event = awaitPointerEvent()
-                        val zoom = event.calculateZoom()
-                        val pan = event.calculatePan()
-                        val multi = event.changes.count { it.pressed } >= 2
-                        if (multi && scale <= 1.05f) {
-                            // Pinching with two thumbs wobbles a little; only treat it as a
-                            // rotation once the fingers have clearly twisted.
-                            val r = event.calculateRotation()
+                        val pressed = event.changes.count { it.pressed }
+                        if (pressed >= 2) {
+                            everMulti = true
+                            val zoom = event.calculateZoom()
+                            val pan = event.calculatePan()
+                            val dRot = event.calculateRotation()
+                            val centroid = event.calculateCentroid(useCurrent = false)
+                            val c = centroid - Offset(box.width / 2f, box.height / 2f + shiftY)
+
+                            var rotDelta = 0f
                             if (twisted) {
-                                rotation += r
-                            } else {
-                                twistRaw += r
-                                if (kotlin.math.abs(twistRaw) > 18f) {
+                                rotDelta = dRot
+                            } else if (scale <= 1.05f) {
+                                // Thumbs wobble while pinching: only start rotating after a clear twist,
+                                // and start from zero so the picture never jumps.
+                                twistRaw += dRot
+                                if (kotlin.math.abs(twistRaw) > 12f) {
                                     twisted = true
-                                    scale = 1f
-                                    offset = Offset.Zero
-                                    rotation += twistRaw - (if (twistRaw > 0) 18f else -18f)
+                                    rotDelta = twistRaw - (if (twistRaw > 0f) 12f else -12f)
                                 }
                             }
-                        }
-                        // Once the image is being twisted, zoom is locked so the rotation stays smooth.
-                        val newScale = if (twisted) scale else (scale * zoom).coerceIn(1f, 6f)
-                        if (scale > 1f || newScale > 1f || multi) {
-                            val maxX = box.width * (newScale - 1f) / 2f
-                            val maxY = box.height * (newScale - 1f) / 2f
-                            offset = if (newScale <= 1f) {
-                                Offset.Zero
-                            } else {
-                                Offset(
-                                    (offset.x + pan.x).coerceIn(-maxX, maxX),
-                                    (offset.y + pan.y).coerceIn(-maxY, maxY),
-                                )
-                            }
+                            // While twisting, zoom is locked so the rotation stays smooth.
+                            val newScale = if (twisted) scale else (scale * zoom).coerceIn(1f, 6f)
+                            val ratio = newScale / scale
+                            val rad = Math.toRadians(rotDelta.toDouble())
+                            val cs = kotlin.math.cos(rad).toFloat()
+                            val sn = kotlin.math.sin(rad).toFloat()
+                            val v = offset - c
+                            var next = Offset(
+                                c.x + ratio * (v.x * cs - v.y * sn) + pan.x,
+                                c.y + ratio * (v.x * sn + v.y * cs) + pan.y,
+                            )
+                            rotation += rotDelta
                             scale = newScale
-                            event.changes.forEach { if (it.positionChanged()) it.consume() }
+                            if (!twisted) next = clampOffset(next, scale, rotation)
+                            offset = next
+                            event.changes.forEach { it.consume() }
+                        } else if (pressed == 1 && !twisted) {
+                            val pan = event.calculatePan()
+                            totalPan += pan
+                            if (scale > 1.01f) {
+                                val raw = offset + pan
+                                val clamped = clampOffset(raw, scale, rotation)
+                                offset = clamped
+                                val hitEdgeX = raw.x != clamped.x && kotlin.math.abs(pan.x) > kotlin.math.abs(pan.y)
+                                // At the edge of a zoomed picture, let the pager take the swipe.
+                                if (!hitEdgeX) event.changes.forEach { if (it.positionChanged()) it.consume() }
+                            }
                         }
                     } while (event.changes.any { it.pressed })
+
                     if (twisted) {
-                        // Snap to the nearest quarter turn.
-                        val from = rotation
-                        val to = Math.round(from / 90f) * 90f
+                        // Settle on the nearest quarter turn (and back to fit if barely zoomed).
+                        val fromR = rotation
+                        val toR = Math.round(fromR / 90f) * 90f
+                        val fromS = scale
+                        val toS = if (fromS < 1.15f) 1f else fromS
+                        val fromO = offset
+                        val toO = clampOffset(fromO, toS, toR)
                         scope.launch {
                             animate(
-                                initialValue = from,
-                                targetValue = to,
+                                initialValue = 0f,
+                                targetValue = 1f,
                                 animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow),
-                            ) { v, _ -> rotation = v }
+                            ) { t, _ ->
+                                rotation = fromR + (toR - fromR) * t
+                                scale = fromS + (toS - fromS) * t
+                                offset = Offset(fromO.x + (toO.x - fromO.x) * t, fromO.y + (toO.y - fromO.y) * t)
+                            }
                         }
+                    } else if (!everMulti && scale <= 1.01f &&
+                        totalPan.y > 200f && totalPan.y > 2f * kotlin.math.abs(totalPan.x)
+                    ) {
+                        onSwipeDown()
                     }
                 }
             },

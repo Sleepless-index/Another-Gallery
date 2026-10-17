@@ -239,6 +239,11 @@ fun GalleryRoot(
                     vm = vm,
                     itemId = backStackEntry.arguments?.getLong("id") ?: 0L,
                     onBack = { nav.popBackStack() },
+                    onOpenVideo = { id ->
+                        nav.navigate("player/$id") {
+                            popUpTo(backStackEntry.destination.id) { inclusive = true }
+                        }
+                    },
                 )
             }
 
