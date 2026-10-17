@@ -15,7 +15,7 @@ enum class LayoutMode { GRID, MASONRY }
 enum class ThemeMode { AMOLED, DARK, LIGHT }
 
 /** Repeat behaviour of the player queue. */
-enum class LoopMode { OFF, ONE, ALL }
+enum class LoopMode { OFF, ONCE, REPEAT }
 
 
 data class Prefs(

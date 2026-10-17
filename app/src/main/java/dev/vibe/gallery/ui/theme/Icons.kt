@@ -180,8 +180,10 @@ object GIcons {
         IconBuilder("Playlist").s("M 4 7 h 11 M 4 12 h 7 M 4 17 h 7").f("M 15 11 v 8 l 6 -4 z").build()
     }
     val Repeat: ImageVector by lazy {
-        IconBuilder("Repeat").s("M 4 11 V 9 a 3 3 0 0 1 3 -3 h 12 M 16 3 l 3 3 l -3 3")
-            .s("M 20 13 v 2 a 3 3 0 0 1 -3 3 H 5 M 8 21 l -3 -3 l 3 -3").build()
+        IconBuilder("Repeat").f("M 7 7 h 10 v 3 l 4 -4 l -4 -4 v 3 H 5 v 6 h 2 z M 17 17 H 7 v -3 l -4 4 l 4 4 v -3 h 12 v -6 h -2 z").build()
+    }
+    val RepeatOne: ImageVector by lazy {
+        IconBuilder("RepeatOne").f("M 7 7 h 10 v 3 l 4 -4 l -4 -4 v 3 H 5 v 6 h 2 z M 17 17 H 7 v -3 l -4 4 l 4 4 v -3 h 12 v -6 h -2 z M 13 15 V 9 h -1 l -2 1 v 1 h 1.5 v 4 z").build()
     }
     val Shuffle: ImageVector by lazy {
         IconBuilder("Shuffle").s("M 3 7 h 3 c 5 0 5 10 10 10 h 4 M 17 14 l 3 3 l -3 3")
