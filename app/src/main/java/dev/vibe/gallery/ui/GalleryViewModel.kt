@@ -241,22 +241,21 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
             message(if (n > 0) "$verb $n to $name" else "Couldn't ${if (move) "move" else "copy"} those files")
             return
         }
-        // Without All files access we can only reach the internal Pictures/ and DCIM/ folders.
+        // Without All files access only copying into internal Pictures/ DCIM is possible.
+        if (move) {
+            message("Moving needs All files access (Settings > Permissions)")
+            return
+        }
         val internal = android.os.Environment.getExternalStorageDirectory().absolutePath
         if (!dir.startsWith("$internal/")) {
-            message("Turn on All files access in Settings to use the SD card")
+            message("The SD card needs All files access (Settings > Permissions)")
             return
         }
         val rel = dir.removePrefix("$internal/").trimEnd('/') + "/"
         val done = MediaOps.copyItems(app, list, rel)
         clearSelection()
-        if (done.isEmpty()) {
-            message("Couldn't ${if (move) "move" else "copy"} those files")
-            return
-        }
-        message("$verb ${done.size} to $name")
+        message(if (done.isEmpty()) "Couldn't copy those files" else "Copied ${done.size} to $name")
         refresh()
-        if (move) requestTrash(done)
     }
 
     // ---- vault ----------------------------------------------------------

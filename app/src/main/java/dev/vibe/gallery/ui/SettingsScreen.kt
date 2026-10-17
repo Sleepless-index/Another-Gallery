@@ -373,7 +373,7 @@ private fun CustomColorDialog(initial: Int, onDismiss: () -> Unit, onApply: (Int
 private fun hexOf(c: Color): String = "#%06X".format(c.toArgb() and 0xFFFFFF)
 
 @Composable
-fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit) {
+fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit, onOpenPermissions: () -> Unit) {
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     val cs = MaterialTheme.colorScheme
     var showCustom by remember { mutableStateOf(false) }
@@ -508,14 +508,16 @@ fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit) {
 
             SectionLabel("Storage")
             CardGroup {
-                val ctx = androidx.compose.ui.platform.LocalContext.current
-                ToggleRow("All files access (move, SD card, no prompts)", dev.vibe.gallery.data.MediaOps.hasAllFiles()) {
-                    runCatching {
-                        ctx.startActivity(
-                            android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                                .setData(android.net.Uri.parse("package:" + ctx.packageName))
-                        )
-                    }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .bounceClick(onClick = onOpenPermissions)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Permissions", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground, modifier = Modifier.weight(1f))
+                    Text("Manage", fontSize = 13.sp, color = cs.onSurfaceVariant)
                 }
             }
 

@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,15 +59,24 @@ private val TabRoutes = setOf("photos", "albums", "search")
 @Composable
 fun GalleryRoot(
     vm: GalleryViewModel,
-    hasPermission: Boolean,
-    onRequestPermission: () -> Unit,
+    perms: PermState,
+    onRequestMedia: () -> Unit,
+    onRequestAllFiles: () -> Unit,
+    onRequestLocation: () -> Unit,
     onAuthenticate: (onSuccess: () -> Unit) -> Unit,
     onSecure: (Boolean) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
 
-    if (!hasPermission) {
-        PermissionScreen(onRequestPermission)
+    var setupDone by rememberSaveable { mutableStateOf(false) }
+    if (!perms.media || !setupDone) {
+        PermissionsScreen(
+            state = perms,
+            onRequestMedia = onRequestMedia,
+            onRequestAllFiles = onRequestAllFiles,
+            onRequestLocation = onRequestLocation,
+            onContinue = { setupDone = true },
+        )
         return
     }
 
@@ -117,7 +127,23 @@ fun GalleryRoot(
                 route = "settings",
                 enterTransition = { slideInHorizontally(tween(300)) { it / 5 } + fadeIn(tween(300)) },
                 popExitTransition = { slideOutHorizontally(tween(260)) { it / 5 } + fadeOut(tween(220)) },
-            ) { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
+            ) {
+                SettingsScreen(vm, onBack = { nav.popBackStack() }, onOpenPermissions = { nav.navigate("permissions") })
+            }
+            composable(
+                route = "permissions",
+                enterTransition = { slideInHorizontally(tween(300)) { it / 5 } + fadeIn(tween(300)) },
+                popExitTransition = { slideOutHorizontally(tween(260)) { it / 5 } + fadeOut(tween(220)) },
+            ) {
+                PermissionsScreen(
+                    state = perms,
+                    onRequestMedia = onRequestMedia,
+                    onRequestAllFiles = onRequestAllFiles,
+                    onRequestLocation = onRequestLocation,
+                    onContinue = {},
+                    onBack = { nav.popBackStack() },
+                )
+            }
 
             composable(
                 route = "vault",
@@ -261,82 +287,6 @@ fun GalleryRoot(
             exit = fadeOut(tween(300)),
         ) {
             CircularProgressIndicator(color = cs.primary, strokeWidth = 3.dp)
-        }
-    }
-}
-
-@Composable
-private fun PermissionScreen(onRequest: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val context = LocalContext.current
-    var shown by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { shown = true }
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(cs.background)
-            .systemBarsPadding()
-            .padding(32.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        AnimatedVisibility(
-            visible = shown,
-            enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { it / 8 },
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Box(
-                    Modifier
-                        .size(88.dp)
-                        .clip(CircleShape)
-                        .background(cs.surfaceVariant),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(GIcons.Photos, contentDescription = null, tint = cs.primary, modifier = Modifier.size(40.dp))
-                }
-                Text(
-                    "Your photos, fast.",
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = cs.onBackground,
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    "Allow access to photos and videos so Gallery can show them. Everything stays on your phone.",
-                    fontSize = 14.sp,
-                    color = cs.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    "Allow access",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = cs.onPrimary,
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(cs.primary)
-                        .bounceClick(onClick = onRequest)
-                        .padding(horizontal = 36.dp, vertical = 16.dp),
-                )
-                Text(
-                    "Open app settings",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = cs.onSurfaceVariant,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .bounceClick(onClick = {
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                                .setData(Uri.fromParts("package", context.packageName, null))
-                            context.startActivity(intent)
-                        })
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                )
-            }
         }
     }
 }
