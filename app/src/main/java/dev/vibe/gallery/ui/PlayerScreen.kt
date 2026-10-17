@@ -103,7 +103,8 @@ import androidx.media3.common.MediaItem as ExoMediaItem
 
 private val PlayerChrome = Color(0xB8141414)
 
-private class Hud(val icon: ImageVector, val text: String, val fraction: Float? = null)
+/** side: 0 = top centre, -1 = left edge (brightness, rewind), 1 = right edge (volume, forward). */
+private class Hud(val icon: ImageVector, val text: String, val fraction: Float? = null, val side: Int = 0)
 
 private fun trackLabel(group: Tracks.Group, index: Int, prefix: String): String {
     val f = group.getTrackFormat(0)
@@ -151,7 +152,24 @@ private fun RoundChrome(icon: ImageVector, desc: String, size: Int = 44, onClick
 }
 
 @Composable
-fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
+private fun SkipButton(icon: ImageVector, desc: String, enabled: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .then(if (enabled) Modifier.bounceClick(onClick = onClick) else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon, contentDescription = desc,
+            tint = Color.White.copy(alpha = if (enabled) 1f else 0.3f),
+            modifier = Modifier.size(26.dp),
+        )
+    }
+}
+
+@Composable
+fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenVideo: (Long) -> Unit) {
     val item = remember(itemId) { vm.findItem(itemId) }
     if (item == null) {
         LaunchedEffect(Unit) { onBack() }
@@ -197,6 +215,15 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
     val menuOpen = speedMenu || audioMenu || subsMenu
+    var lastHud by remember { mutableStateOf<Hud?>(null) }
+    if (hud != null) lastHud = hud
+
+    // Previous / next video in the list the viewer was opened from.
+    val viewerList by vm.viewerList.collectAsStateWithLifecycle()
+    val videoList = remember(viewerList, itemId) { viewerList.filter { it.isVideo } }
+    val videoIdx = videoList.indexOfFirst { it.id == itemId }
+    val prevVideo = if (videoIdx > 0) videoList[videoIdx - 1] else null
+    val nextVideo = if (videoIdx >= 0) videoList.getOrNull(videoIdx + 1) else null
 
     val audio = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val maxVol = remember { audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
@@ -394,10 +421,10 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                             onDoubleTap = { o ->
                                 if (o.x < size.width / 2f) {
                                     seekBy(-10_000)
-                                    hud = Hud(GIcons.RotateLeft, "-10s")
+                                    hud = Hud(GIcons.RotateLeft, "-10s", null, -1)
                                 } else {
                                     seekBy(10_000)
-                                    hud = Hud(GIcons.Rotate, "+10s")
+                                    hud = Hud(GIcons.Rotate, "+10s", null, 1)
                                 }
                             },
                         )
@@ -449,13 +476,13 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                                     }
                                     2 -> {
                                         applyBrightness(brightness - drag.y / size.height * 1.2f)
-                                        hud = Hud(GIcons.Brightness, "${(brightness * 100).roundToInt()}%", brightness)
+                                        hud = Hud(GIcons.Brightness, "${(brightness * 100).roundToInt()}%", brightness, -1)
                                     }
                                     3 -> {
                                         volAccum = (volAccum - drag.y / size.height * maxVol * 1.2f)
                                             .coerceIn(0f, maxVol.toFloat())
                                         audio.setStreamVolume(AudioManager.STREAM_MUSIC, volAccum.roundToInt(), 0)
-                                        hud = Hud(GIcons.Volume, "${volAccum.roundToInt()}/$maxVol", volAccum / maxVol)
+                                        hud = Hud(GIcons.Volume, "${volAccum.roundToInt()}/$maxVol", volAccum / maxVol, 1)
                                     }
                                     else -> {}
                                 }
@@ -467,7 +494,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
 
         // gesture HUD
         AnimatedVisibility(
-            visible = hud != null,
+            visible = hud != null && hud?.side == 0,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .displayCutoutPadding()
@@ -475,7 +502,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
             enter = fadeIn(tween(120)) + scaleIn(tween(160), initialScale = 0.85f),
             exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.9f),
         ) {
-            val h = hud
+            val h = lastHud
             if (h != null) {
                 Row(
                     modifier = Modifier
@@ -502,6 +529,51 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                                     .background(cs.primary)
                             )
                         }
+                    }
+                }
+            }
+        }
+
+        // side HUDs: rewind / brightness on the left, forward / volume on the right
+        for (side in listOf(-1, 1)) {
+            AnimatedVisibility(
+                visible = hud != null && hud?.side == side,
+                modifier = Modifier
+                    .align(if (side < 0) Alignment.CenterStart else Alignment.CenterEnd)
+                    .displayCutoutPadding()
+                    .padding(horizontal = 36.dp),
+                enter = fadeIn(tween(120)) + scaleIn(tween(160), initialScale = 0.85f),
+                exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.9f),
+            ) {
+                val h = lastHud
+                if (h != null && h.side == side) {
+                    Column(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(26.dp))
+                            .background(PlayerChrome)
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(h.icon, contentDescription = null, tint = cs.primary, modifier = Modifier.size(22.dp))
+                        if (h.fraction != null) {
+                            Box(
+                                Modifier
+                                    .width(5.dp)
+                                    .height(96.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.25f)),
+                                contentAlignment = Alignment.BottomCenter,
+                            ) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .fillMaxHeight(h.fraction.coerceIn(0f, 1f))
+                                        .background(cs.primary)
+                                )
+                            }
+                        }
+                        Text(h.text, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
                     }
                 }
             }
@@ -624,11 +696,14 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                 Row(
                     modifier = Modifier.align(Alignment.Center),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(44.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
+                    SkipButton(GIcons.SkipPrevious, "Previous video", prevVideo != null) {
+                        prevVideo?.let { onOpenVideo(it.id) }
+                    }
                     Box(
                         Modifier
-                            .size(52.dp)
+                            .size(48.dp)
                             .clip(CircleShape)
                             .background(PlayerChrome)
                             .bounceClick(onClick = { seekBy(-10_000); interaction++ }),
@@ -655,12 +730,15 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
 
                     Box(
                         Modifier
-                            .size(52.dp)
+                            .size(48.dp)
                             .clip(CircleShape)
                             .background(PlayerChrome)
                             .bounceClick(onClick = { seekBy(10_000); interaction++ }),
                         contentAlignment = Alignment.Center,
                     ) { Text("+10", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold) }
+                    SkipButton(GIcons.SkipNext, "Next video", nextVideo != null) {
+                        nextVideo?.let { onOpenVideo(it.id) }
+                    }
                 }
 
                 // bottom bar
@@ -767,7 +845,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit) {
                                 }
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                RoundChrome(GIcons.Rotate, "Rotate screen", 36) {
+                                RoundChrome(GIcons.ScreenRotate, "Rotate screen", 36) {
                                     val land = config.orientation == Configuration.ORIENTATION_LANDSCAPE
                                     activity?.requestedOrientation = if (land) {
                                         ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
