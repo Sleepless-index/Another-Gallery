@@ -551,14 +551,22 @@ internal fun ZoomableImage(
 @Composable
 private fun AmbientBackdrop(item: MediaItem) {
     val ctx = LocalContext.current
-    val req = remember(item.uri) { dev.vibe.gallery.data.thumbRequest(ctx, item.uri, 40, item.isVideo) }
+    val req = remember(item.uri) {
+        coil.request.ImageRequest.Builder(ctx)
+            .data(item.uri)
+            .size(48)
+            // Own cache key, otherwise Coil hands back the full-size bitmap already loaded for the photo.
+            .memoryCacheKey("ambient_" + item.id)
+            .apply { if (item.isVideo) setParameter("thumb", true) }
+            .build()
+    }
     Box(Modifier.fillMaxSize()) {
         coil.compose.AsyncImage(
             model = req,
             contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().blur(24.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded),
         )
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
     }

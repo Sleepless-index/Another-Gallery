@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -95,6 +96,35 @@ fun AlbumPickerSheet(
                 fontWeight = FontWeight.ExtraBold,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
             )
+            if (move && !MediaOps.hasAllFiles()) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Text(
+                        "Moving files needs All files access. Copying, deleting and everything else works without it.",
+                        fontSize = 14.sp, color = cs.onSurfaceVariant,
+                    )
+                    Text(
+                        "Allow All files access",
+                        fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = cs.onPrimary,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(cs.primary)
+                            .bounceClick(onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                                            .setData(android.net.Uri.parse("package:" + context.packageName))
+                                    )
+                                }
+                                onDismiss()
+                            })
+                            .padding(horizontal = 28.dp, vertical = 13.dp),
+                    )
+                }
+                return@Column
+            }
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
@@ -126,6 +156,7 @@ fun AlbumPickerSheet(
                 items(albums, key = { it.bucketId }) { album ->
                     AlbumPickTile(
                         album = album,
+                        here = items.isNotEmpty() && items.all { it.bucketId == album.bucketId },
                         bytes = sizes[album.bucketId] ?: 0L,
                         sd = album.bucketId in onSd,
                         onClick = {
@@ -176,10 +207,13 @@ fun AlbumPickerSheet(
 }
 
 @Composable
-private fun AlbumPickTile(album: Album, bytes: Long, sd: Boolean, onClick: () -> Unit) {
+private fun AlbumPickTile(album: Album, here: Boolean, bytes: Long, sd: Boolean, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val ctx = LocalContext.current
-    Column(Modifier.fillMaxWidth().bounceClick(onClick = onClick), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        Modifier.fillMaxWidth().alpha(if (here) 0.35f else 1f).then(if (here) Modifier else Modifier.bounceClick(onClick = onClick)),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(20.dp)).background(cs.surfaceVariant)) {
             AsyncImage(
                 model = remember(album.cover.uri) { thumbRequest(ctx, album.cover.uri, 400, album.cover.isVideo) },
@@ -197,7 +231,7 @@ private fun AlbumPickTile(album: Album, bytes: Long, sd: Boolean, onClick: () ->
         Column(Modifier.padding(horizontal = 4.dp)) {
             Text(album.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "%,d %s (%s)".format(album.count, if (album.count == 1) "item" else "items", formatSize(bytes)),
+                if (here) "Already here" else "%,d %s (%s)".format(album.count, if (album.count == 1) "item" else "items", formatSize(bytes)),
                 fontSize = 12.sp, color = cs.onSurfaceVariant,
             )
         }
