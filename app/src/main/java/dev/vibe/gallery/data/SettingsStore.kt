@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -12,6 +13,9 @@ import kotlinx.coroutines.flow.map
 enum class LayoutMode { GRID, MASONRY }
 
 enum class ThemeMode { AMOLED, DARK, LIGHT }
+
+/** What happens when a video ends. */
+enum class PlayMode { ONCE, NEXT, LOOP, SHUFFLE }
 
 
 data class Prefs(
@@ -22,6 +26,10 @@ data class Prefs(
     val resume: Boolean = true,
     val autoplay: Boolean = true,
     val blur: Boolean = true,
+    val playMode: PlayMode = PlayMode.ONCE,
+    val trashDays: Int = 30,
+    val pinned: Set<Long> = emptySet(),
+    val hidden: Set<Long> = emptySet(),
 ) {
     companion object {
         const val ACCENT_LIME = 0xFFD4FF3A.toInt()
@@ -43,6 +51,10 @@ class SettingsStore(private val context: Context) {
     private val kResume = booleanPreferencesKey("resume")
     private val kAutoplay = booleanPreferencesKey("autoplay")
     private val kBlur = booleanPreferencesKey("blur")
+    private val kPlayMode = stringPreferencesKey("playMode")
+    private val kTrashDays = intPreferencesKey("trashDays")
+    private val kPinned = stringSetPreferencesKey("pinnedAlbums")
+    private val kHidden = stringSetPreferencesKey("hiddenAlbums")
 
     val flow: Flow<Prefs> = context.dataStore.data.map { p ->
         Prefs(
@@ -53,6 +65,10 @@ class SettingsStore(private val context: Context) {
             resume = p[kResume] ?: true,
             autoplay = p[kAutoplay] ?: true,
             blur = p[kBlur] ?: true,
+            playMode = runCatching { PlayMode.valueOf(p[kPlayMode] ?: "ONCE") }.getOrDefault(PlayMode.ONCE),
+            trashDays = p[kTrashDays] ?: 30,
+            pinned = (p[kPinned] ?: emptySet()).mapNotNull { it.toLongOrNull() }.toSet(),
+            hidden = (p[kHidden] ?: emptySet()).mapNotNull { it.toLongOrNull() }.toSet(),
         )
     }
 
@@ -63,4 +79,21 @@ class SettingsStore(private val context: Context) {
     suspend fun setResume(v: Boolean) { context.dataStore.edit { it[kResume] = v } }
     suspend fun setAutoplay(v: Boolean) { context.dataStore.edit { it[kAutoplay] = v } }
     suspend fun setBlur(v: Boolean) { context.dataStore.edit { it[kBlur] = v } }
+
+    suspend fun setPlayMode(v: PlayMode) { context.dataStore.edit { it[kPlayMode] = v.name } }
+    suspend fun setTrashDays(v: Int) { context.dataStore.edit { it[kTrashDays] = v } }
+
+    suspend fun setPinned(id: Long, on: Boolean) {
+        context.dataStore.edit { p ->
+            val cur = p[kPinned] ?: emptySet()
+            p[kPinned] = if (on) cur + id.toString() else cur - id.toString()
+        }
+    }
+
+    suspend fun setHidden(id: Long, on: Boolean) {
+        context.dataStore.edit { p ->
+            val cur = p[kHidden] ?: emptySet()
+            p[kHidden] = if (on) cur + id.toString() else cur - id.toString()
+        }
+    }
 }

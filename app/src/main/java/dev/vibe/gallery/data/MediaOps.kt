@@ -164,4 +164,24 @@ object MediaOps {
         }
         return null
     }
+
+    /**
+     * Renames an album's folder on disk (needs All files access) and re-scans so MediaStore follows.
+     * Returns null on success or a short reason for the failure.
+     */
+    suspend fun renameFolder(context: Context, items: List<MediaItem>, dir: String, newName: String): String? =
+        withContext(Dispatchers.IO) {
+            val src = File(dir)
+            if (!src.isDirectory) return@withContext "Couldn't find that folder"
+            val dest = File(src.parentFile, newName)
+            if (dest.exists()) return@withContext "A folder named \"$newName\" already exists"
+            val oldPaths = items.mapNotNull { pathOf(context, it.uri) }
+            if (!src.renameTo(dest)) return@withContext "Couldn't rename the folder"
+            val touched = oldPaths + oldPaths.map { dest.absolutePath + "/" + it.substringAfterLast('/') }
+            val latch = java.util.concurrent.CountDownLatch(touched.size.coerceAtLeast(1))
+            if (touched.isEmpty()) latch.countDown()
+            MediaScannerConnection.scanFile(context, touched.toTypedArray(), null) { _, _ -> latch.countDown() }
+            latch.await(20, java.util.concurrent.TimeUnit.SECONDS)
+            null
+        }
 }

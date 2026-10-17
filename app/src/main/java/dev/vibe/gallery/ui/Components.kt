@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -49,9 +50,11 @@ import androidx.compose.ui.unit.sp
 import dev.vibe.gallery.ui.theme.GIcons
 
 /** Click with a little springy press-in, used on every button in the app. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 fun Modifier.bounceClick(
     enabled: Boolean = true,
     role: Role = Role.Button,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ): Modifier = composed {
     val source = remember { MutableInteractionSource() }
@@ -66,12 +69,25 @@ fun Modifier.bounceClick(
             scaleX = s
             scaleY = s
         }
-        .clickable(
-            interactionSource = source,
-            indication = null,
-            enabled = enabled,
-            role = role,
-            onClick = onClick,
+        .then(
+            if (onLongClick == null) {
+                Modifier.clickable(
+                    interactionSource = source,
+                    indication = null,
+                    enabled = enabled,
+                    role = role,
+                    onClick = onClick,
+                )
+            } else {
+                Modifier.combinedClickable(
+                    interactionSource = source,
+                    indication = null,
+                    enabled = enabled,
+                    role = role,
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                )
+            },
         )
 }
 
