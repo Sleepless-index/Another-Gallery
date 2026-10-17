@@ -94,6 +94,12 @@ import dev.vibe.gallery.PlaybackService
 import dev.vibe.gallery.util.shareItems
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.media3.common.AudioAttributes
+import androidx.media3.common.MediaMetadata
+import androidx.media3.session.MediaSession
+import androidx.compose.runtime.key
+import androidx.compose.ui.zIndex
+import dev.vibe.gallery.PlaybackBridge
+import dev.vibe.gallery.R
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
@@ -155,10 +161,10 @@ private fun PlayerChip(text: String, icon: ImageVector?, accent: Boolean = false
 }
 
 @Composable
-private fun RoundChrome(icon: ImageVector, desc: String, size: Int = 44, onClick: () -> Unit) {
+private fun RoundChrome(icon: ImageVector, desc: String, size: Int = 44, tint: Color = Color.White, onClick: () -> Unit) {
     GIconButton(
         icon = icon, desc = desc, onClick = onClick,
-        size = size.dp, container = PlayerChrome, tint = Color.White,
+        size = size.dp, container = PlayerChrome, tint = tint,
     )
 }
 
@@ -209,6 +215,7 @@ private fun exoItemFor(v: MediaItem, subs: List<ExoMediaItem.SubtitleConfigurati
     ExoMediaItem.Builder()
         .setUri(v.uri)
         .setMediaId(v.id.toString())
+        .setMediaMetadata(MediaMetadata.Builder().setTitle(v.name).build())
         .setSubtitleConfigurations(subs)
         .build()
 
@@ -268,6 +275,10 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
             }
     }
 
+    val session = remember(player) {
+        MediaSession.Builder(context, player).setId("gallery_" + java.util.UUID.randomUUID()).build()
+    }
+
     val subtitlePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             val idx = player.currentMediaItemIndex
@@ -307,14 +318,14 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     var speedMenu by remember { mutableStateOf(false) }
     var audioMenu by remember { mutableStateOf(false) }
     var subsMenu by remember { mutableStateOf(false) }
-    var menuDialog by remember { mutableStateOf(false) }
+    var moreMenu by remember { mutableStateOf(false) }
     var queueSheet by remember { mutableStateOf(false) }
     var mirror by remember { mutableStateOf(false) }
     var timerMin by remember { mutableIntStateOf(0) }
     var navTick by remember { mutableIntStateOf(0) }
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
-    val menuOpen = speedMenu || audioMenu || subsMenu || menuDialog || queueSheet
+    val menuOpen = speedMenu || audioMenu || subsMenu || moreMenu || queueSheet
     var lastHud by remember { mutableStateOf<Hud?>(null) }
     if (hud != null) lastHud = hud
 
@@ -348,6 +359,23 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
         player.seekTo((player.currentPosition + ms).coerceIn(0L, dur))
     }
 
+    fun cycleLoop() {
+        val next = when (prefs.loop) {
+            LoopMode.OFF -> LoopMode.ONCE
+            LoopMode.ONCE -> LoopMode.REPEAT
+            LoopMode.REPEAT -> LoopMode.OFF
+        }
+        vm.setLoop(next)
+        hud = Hud(
+            if (next == LoopMode.REPEAT) GIcons.RepeatOne else GIcons.Repeat,
+            when (next) {
+                LoopMode.OFF -> "Loop off"
+                LoopMode.ONCE -> "Loop once"
+                LoopMode.REPEAT -> "Loop repeat"
+            },
+        )
+    }
+
     fun togglePlay() {
         if (player.isPlaying) {
             player.pause()
@@ -374,7 +402,6 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
-                if (!playing && !player.playWhenReady) PlaybackService.stop(context)
             }
 
             override fun onTracksChanged(t: Tracks) {
@@ -385,6 +412,8 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                 val idx = player.currentMediaItemIndex
                 curIdx = idx
                 navTick++
+                // "Loop once" has done its extra play: go back to normal.
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT && prefs.loop == LoopMode.ONCE) vm.setLoop(LoopMode.OFF)
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
                     val next = queue.getOrNull(idx) ?: return
                     position = 0L
@@ -454,11 +483,10 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     LaunchedEffect(prefs.loop, prefs.shuffle, prefs.autoNext) {
         player.repeatMode = when (prefs.loop) {
             LoopMode.OFF -> Player.REPEAT_MODE_OFF
-            LoopMode.ONE -> Player.REPEAT_MODE_ONE
-            LoopMode.ALL -> Player.REPEAT_MODE_ALL
+            LoopMode.ONCE, LoopMode.REPEAT -> Player.REPEAT_MODE_ONE
         }
         player.shuffleModeEnabled = prefs.shuffle
-        player.pauseAtEndOfMediaItems = !(prefs.autoNext || prefs.shuffle || prefs.loop == LoopMode.ALL)
+        player.pauseAtEndOfMediaItems = !(prefs.autoNext || prefs.shuffle)
         navTick++
     }
 
@@ -482,7 +510,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
 
     // Background play keeps a notification (and so the process) alive while playing.
     LaunchedEffect(prefs.bgPlay, isPlaying) {
-        if (prefs.bgPlay && isPlaying) PlaybackService.start(context, item.name)
+        if (prefs.bgPlay && (isPlaying || PlaybackBridge.player != null)) PlaybackService.start(context, item.name)
         if (!prefs.bgPlay) PlaybackService.stop(context)
     }
 
@@ -553,11 +581,23 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
         }
     }
 
+    DisposableEffect(player) {
+        PlaybackBridge.player = player
+        PlaybackBridge.session = session
+        onDispose {
+            if (PlaybackBridge.player === player) {
+                PlaybackBridge.player = null
+                PlaybackBridge.session = null
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             val cur = queue.getOrNull(player.currentMediaItemIndex)
             if (cur != null && cur.id >= 0) vm.saveResume(cur.id, player.currentPosition, player.duration.coerceAtLeast(0))
             PlaybackService.stop(context)
+            session.release()
             player.release()
         }
     }
@@ -565,23 +605,31 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     // ---- UI -------------------------------------------------------------
     val exoPlayer = player
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    useController = false
-                    this.player = exoPlayer
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                }
-            },
-            update = {
-                it.resizeMode = if (fill) {
-                    AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                } else {
-                    AspectRatioFrameLayout.RESIZE_MODE_FIT
-                }
-            },
-            modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = if (mirror) -1f else 1f },
-        )
+        // Mirroring needs a TextureView (a SurfaceView ignores view transforms).
+        key(mirror) {
+            AndroidView(
+                factory = { ctx ->
+                    val v = if (mirror) {
+                        android.view.LayoutInflater.from(ctx).inflate(R.layout.player_texture, null, false) as PlayerView
+                    } else {
+                        PlayerView(ctx)
+                    }
+                    v.apply {
+                        useController = false
+                        this.player = exoPlayer
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    }
+                },
+                update = {
+                    it.resizeMode = if (fill) {
+                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    } else {
+                        AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    }
+                },
+                modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = if (mirror) -1f else 1f },
+            )
+        }
 
         // gesture layer
         Box(
@@ -687,8 +735,9 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
             visible = hud != null && hud?.side == 0,
             modifier = Modifier
                 .align(Alignment.TopCenter)
+                .zIndex(2f)
                 .displayCutoutPadding()
-                .padding(top = 28.dp),
+                .padding(top = 88.dp),
             enter = fadeIn(tween(120)) + scaleIn(tween(160), initialScale = 0.85f),
             exit = fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.9f),
         ) {
@@ -840,7 +889,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
+                        .height(240.dp)
                         .align(Alignment.BottomCenter)
                         .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xD1000000))))
                 )
@@ -874,7 +923,71 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                         }
                         RoundChrome(GIcons.Pip, "Picture in picture") { enterPip() }
                         Box {
-                            RoundChrome(GIcons.Subtitles, "Subtitles") { subsMenu = true }
+                            RoundChrome(GIcons.More, "More options") { moreMenu = true }
+                            DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
+                                CompactMenuItem(
+                                    text = { PlayerMenuRow(GIcons.Headphones, "Background play", prefs.bgPlay) },
+                                    onClick = {
+                                        moreMenu = false
+                                        val on = !prefs.bgPlay
+                                        vm.setBgPlay(on)
+                                        if (on && Build.VERSION.SDK_INT >= 33) {
+                                            notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                        }
+                                        hud = Hud(GIcons.Headphones, if (on) "Background play on" else "Background play off")
+                                    },
+                                )
+                                CompactMenuItem(
+                                    text = { PlayerMenuRow(GIcons.Subtitles, "Subtitles") },
+                                    onClick = {
+                                        moreMenu = false
+                                        subsMenu = true
+                                    },
+                                )
+                                CompactMenuItem(
+                                    text = { PlayerMenuRow(GIcons.Shuffle, "Shuffle", prefs.shuffle) },
+                                    onClick = {
+                                        moreMenu = false
+                                        vm.setShuffle(!prefs.shuffle)
+                                        hud = Hud(GIcons.Shuffle, if (!prefs.shuffle) "Shuffle on" else "Shuffle off")
+                                    },
+                                )
+                                CompactMenuItem(
+                                    text = { PlayerMenuRow(GIcons.FastForward, "Autoplay next", prefs.autoNext) },
+                                    onClick = {
+                                        moreMenu = false
+                                        vm.setAutoNext(!prefs.autoNext)
+                                        hud = Hud(GIcons.FastForward, if (!prefs.autoNext) "Autoplay next on" else "Autoplay next off")
+                                    },
+                                )
+                                CompactMenuItem(
+                                    text = { PlayerMenuRow(GIcons.Timer, if (timerMin > 0) "Timer · $timerMin min" else "Timer", timerMin > 0) },
+                                    onClick = {
+                                        moreMenu = false
+                                        timerMin = when (timerMin) {
+                                            0 -> 15
+                                            15 -> 30
+                                            30 -> 60
+                                            else -> 0
+                                        }
+                                        hud = Hud(GIcons.Timer, if (timerMin > 0) "Sleep in $timerMin min" else "Timer off")
+                                    },
+                                )
+                                CompactMenuItem(
+                                    text = { PlayerMenuRow(GIcons.Flip, "Mirror", mirror) },
+                                    onClick = {
+                                        moreMenu = false
+                                        mirror = !mirror
+                                    },
+                                )
+                                CompactMenuItem(
+                                    text = { PlayerMenuRow(GIcons.Share, "Share") },
+                                    onClick = {
+                                        moreMenu = false
+                                        shareItems(context, listOf(item))
+                                    },
+                                )
+                            }
                             DropdownMenu(expanded = subsMenu, onDismissRequest = { subsMenu = false }) {
                                 val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
                                 CompactMenuItem(
@@ -920,62 +1033,21 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                     enter = slideInVertically(tween(240)) { it / 2 },
                     exit = slideOutVertically(tween(180)) { it / 2 },
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .displayCutoutPadding()
-                            .padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(
-                                formatDuration(if (scrubbing) (scrubValue * duration).toLong() else position),
-                                color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(44.dp),
-                            )
-                            val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
-                            Slider(
-                                value = if (scrubbing) scrubValue else fraction,
-                                onValueChange = {
-                                    scrubbing = true
-                                    scrubValue = it
-                                },
-                                onValueChangeFinished = {
-                                    val target = (scrubValue * duration).toLong()
-                                    player.seekTo(target)
-                                    position = target
-                                    scrubbing = false
-                                    interaction++
-                                },
-                                thumb = {
-                                    Box(
-                                        Modifier
-                                            .size(width = 4.dp, height = 22.dp)
-                                            .clip(CircleShape)
-                                            .background(cs.primary)
-                                    )
-                                },
-                                colors = SliderDefaults.colors(
-                                    thumbColor = cs.primary,
-                                    activeTrackColor = cs.primary,
-                                    inactiveTrackColor = Color.White.copy(alpha = 0.22f),
-                                ),
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                formatDuration(duration),
-                                color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(44.dp),
-                            )
-                        }
                         val landNow = config.orientation == Configuration.ORIENTATION_LANDSCAPE
                         val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
 
                         val leftChips: @Composable () -> Unit = {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                PlayerChip("Lock", GIcons.Lock) {
-                                    locked = true
-                                    controls = false
+                                if (landNow) {
+                                    PlayerChip("Lock", GIcons.Lock) {
+                                        locked = true
+                                        controls = false
+                                    }
+                                } else {
+                                    RoundChrome(GIcons.Lock, "Lock", 36) {
+                                        locked = true
+                                        controls = false
+                                    }
                                 }
                                 Box {
                                     PlayerChip("${if (speed % 1f == 0f) speed.toInt().toString() else speed.toString()}x", null, accent = true) {
@@ -1058,7 +1130,13 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
 
                         val rightButtons: @Composable () -> Unit = {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                RoundChrome(GIcons.More, "Player menu", 36) { menuDialog = true }
+                                RoundChrome(
+                                    if (prefs.loop == LoopMode.REPEAT) GIcons.RepeatOne else GIcons.Repeat,
+                                    "Loop",
+                                    36,
+                                    tint = if (prefs.loop == LoopMode.OFF) Color.White else cs.primary,
+                                ) { cycleLoop() }
+                                RoundChrome(GIcons.Playlist, "Queue", 36) { queueSheet = true }
                                 RoundChrome(GIcons.ScreenRotate, "Rotate screen", 36) {
                                     activity?.requestedOrientation = if (landNow) {
                                         ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
@@ -1070,83 +1148,68 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                             }
                         }
 
-                        if (landNow) {
-                            Box(Modifier.fillMaxWidth()) {
-                                Box(Modifier.align(Alignment.CenterStart)) { leftChips() }
-                                Box(Modifier.align(Alignment.Center)) { transport() }
-                                Box(Modifier.align(Alignment.CenterEnd)) { rightButtons() }
-                            }
-                        } else {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { transport() }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                leftChips()
-                                rightButtons()
-                            }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .displayCutoutPadding()
+                            .padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { transport() }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(
+                                formatDuration(if (scrubbing) (scrubValue * duration).toLong() else position),
+                                color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.width(44.dp),
+                            )
+                            val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+                            Slider(
+                                value = if (scrubbing) scrubValue else fraction,
+                                onValueChange = {
+                                    scrubbing = true
+                                    scrubValue = it
+                                },
+                                onValueChangeFinished = {
+                                    val target = (scrubValue * duration).toLong()
+                                    player.seekTo(target)
+                                    position = target
+                                    scrubbing = false
+                                    interaction++
+                                },
+                                thumb = {
+                                    Box(
+                                        Modifier
+                                            .size(width = 4.dp, height = 22.dp)
+                                            .clip(CircleShape)
+                                            .background(cs.primary)
+                                    )
+                                },
+                                colors = SliderDefaults.colors(
+                                    thumbColor = cs.primary,
+                                    activeTrackColor = cs.primary,
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.22f),
+                                ),
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                formatDuration(duration),
+                                color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.width(44.dp),
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            leftChips()
+                            rightButtons()
                         }
                     }
                 }
             }
         }
-    }
-
-    fun cycleLoop() {
-        val next = when (prefs.loop) {
-            LoopMode.OFF -> LoopMode.ONE
-            LoopMode.ONE -> LoopMode.ALL
-            LoopMode.ALL -> LoopMode.OFF
-        }
-        vm.setLoop(next)
-        hud = Hud(
-            GIcons.Repeat,
-            when (next) {
-                LoopMode.OFF -> "Loop off"
-                LoopMode.ONE -> "Loop this video"
-                LoopMode.ALL -> "Loop all"
-            },
-        )
-    }
-
-    if (menuDialog) {
-        PlayerMenuDialog(
-            bgPlay = prefs.bgPlay,
-            loop = prefs.loop,
-            shuffle = prefs.shuffle,
-            autoNext = prefs.autoNext,
-            timerMin = timerMin,
-            mirror = mirror,
-            onBgPlay = {
-                val on = !prefs.bgPlay
-                vm.setBgPlay(on)
-                if (on && Build.VERSION.SDK_INT >= 33) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                hud = Hud(GIcons.Headphones, if (on) "Background play on" else "Background play off")
-            },
-            onQueue = { queueSheet = true },
-            onLoop = { cycleLoop() },
-            onShuffle = {
-                vm.setShuffle(!prefs.shuffle)
-                hud = Hud(GIcons.Shuffle, if (!prefs.shuffle) "Shuffle on" else "Shuffle off")
-            },
-            onAutoNext = {
-                vm.setAutoNext(!prefs.autoNext)
-                hud = Hud(GIcons.FastForward, if (!prefs.autoNext) "Autoplay next on" else "Autoplay next off")
-            },
-            onTimer = {
-                timerMin = when (timerMin) {
-                    0 -> 15
-                    15 -> 30
-                    30 -> 60
-                    else -> 0
-                }
-                hud = Hud(GIcons.Timer, if (timerMin > 0) "Sleep in $timerMin min" else "Timer off")
-            },
-            onMirror = { mirror = !mirror },
-            onShare = { shareItems(context, listOf(item)) },
-            onDismiss = { menuDialog = false },
-        )
     }
 
     if (queueSheet) {
