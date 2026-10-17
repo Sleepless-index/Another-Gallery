@@ -130,6 +130,18 @@ object GIcons {
     val Location: ImageVector by lazy {
         IconBuilder("Location").s("M 12 21 s -6.5 -5.6 -6.5 -11 a 6.5 6.5 0 0 1 13 0 c 0 5.4 -6.5 11 -6.5 11 z").s(circle(12f, 10f, 2.3f)).build()
     }
+    val RotateToPortrait: ImageVector by lazy {
+        IconBuilder("RotateToPortrait").s(rrect(9f, 6f, 6f, 12f, 1.6f))
+            .s("M 3.6 8.4 A 9.5 9.5 0 0 1 9 2.9 M 9 2.9 l -2.29 -0.69 M 9 2.9 l -1.45 1.91")
+            .s("M 20.4 15.6 A 9.5 9.5 0 0 1 15 21.1 M 15 21.1 l 2.29 0.69 M 15 21.1 l 1.45 -1.91")
+            .build()
+    }
+    val RotateToLandscape: ImageVector by lazy {
+        IconBuilder("RotateToLandscape").s(rrect(6f, 9f, 12f, 6f, 1.6f))
+            .s("M 3.6 8.4 A 9.5 9.5 0 0 1 9 2.9 M 9 2.9 l -2.29 -0.69 M 9 2.9 l -1.45 1.91")
+            .s("M 20.4 15.6 A 9.5 9.5 0 0 1 15 21.1 M 15 21.1 l 2.29 0.69 M 15 21.1 l 1.45 -1.91")
+            .build()
+    }
     val Unlock: ImageVector by lazy {
         IconBuilder("Unlock").s(rrect(5f, 11f, 14f, 9f, 2.5f)).s("M 8 11 V 8 a 4 4 0 0 1 7.5 -1.5").build()
     }
