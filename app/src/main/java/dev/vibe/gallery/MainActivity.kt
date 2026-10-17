@@ -29,6 +29,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.vibe.gallery.ui.GalleryRoot
+import dev.vibe.gallery.ui.PermState
 import dev.vibe.gallery.ui.GalleryViewModel
 import dev.vibe.gallery.ui.UiEvent
 import dev.vibe.gallery.ui.theme.GalleryTheme
@@ -37,7 +38,7 @@ import kotlinx.coroutines.launch
 class MainActivity : FragmentActivity() {
 
     private val vm: GalleryViewModel by viewModels()
-    private val hasPermission = mutableStateOf(false)
+    private val perms = mutableStateOf(PermState(false, false, false))
 
     /** Android 10 only: files we must delete one by one, asking permission for each. */
     private val legacyDeleteQueue = ArrayDeque<Uri>()
@@ -81,20 +82,6 @@ class MainActivity : FragmentActivity() {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
 
-    /** Asks once for "All files access" so moves and deletes work without extra prompts. */
-    private fun askAllFilesOnce() {
-        if (Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()) return
-        val sp = getSharedPreferences("gallery", MODE_PRIVATE)
-        if (sp.getBoolean("askedAllFiles", false)) return
-        sp.edit().putBoolean("askedAllFiles", true).apply()
-        runCatching {
-            startActivity(
-                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                    .setData(Uri.parse("package:$packageName"))
-            )
-        }
-    }
-
     /** Trash / restore / delete directly when we have All files access. True if it worked. */
     private fun direct(uris: List<Uri>, op: String): Boolean {
         if (Build.VERSION.SDK_INT < 30 || !Environment.isExternalStorageManager()) return false
@@ -112,13 +99,22 @@ class MainActivity : FragmentActivity() {
 
     private fun updatePermission() {
         val granted = hasMediaPermission()
-        if (granted && !hasPermission.value) vm.refresh()
-        hasPermission.value = granted
-        if (granted) askAllFilesOnce()
+        if (granted && !perms.value.media) vm.refresh()
+        perms.value = PermState(
+            media = granted,
+            allFiles = Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager(),
+            location = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_MEDIA_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED,
+        )
     }
 
-    private fun requestPermissions() {
-        permissionLauncher.launch(mediaPermissions() + Manifest.permission.ACCESS_MEDIA_LOCATION)
+    private fun openAllFilesSettings() {
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                    .setData(Uri.parse("package:$packageName"))
+            )
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -138,8 +134,10 @@ class MainActivity : FragmentActivity() {
             GalleryTheme(prefs) {
                 GalleryRoot(
                     vm = vm,
-                    hasPermission = hasPermission.value,
-                    onRequestPermission = { requestPermissions() },
+                    perms = perms.value,
+                    onRequestMedia = { permissionLauncher.launch(mediaPermissions()) },
+                    onRequestAllFiles = { openAllFilesSettings() },
+                    onRequestLocation = { permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_MEDIA_LOCATION)) },
                     onAuthenticate = { ok -> authenticate(ok) },
                     onSecure = { secure ->
                         if (secure) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
