@@ -24,41 +24,68 @@ object MediaOps {
             }
         }.getOrNull()
 
+    /** Storage volumes the user can put albums on: internal first, then SD card / USB. */
+    fun storageRoots(context: Context): List<Pair<String, String>> {
+        val internal = Environment.getExternalStorageDirectory().absolutePath
+        val out = mutableListOf("Internal storage" to internal)
+        runCatching {
+            context.getExternalFilesDirs(null).filterNotNull().forEach { f ->
+                val root = f.absolutePath.substringBefore("/Android/data")
+                if (root != internal && out.none { it.second == root }) {
+                    out += (if (out.size == 1) "SD card" else "Storage ${out.size}") to root
+                }
+            }
+        }
+        return out
+    }
+
+    /** The folder an existing album really lives in, on whichever volume it is. */
+    suspend fun albumAbsDir(context: Context, album: Album): String? = withContext(Dispatchers.IO) {
+        pathOf(context, album.cover.uri)?.substringBeforeLast('/')
+    }
+
     /**
-     * Really moves files (a rename on the same storage, so it is instant and keeps the same
-     * file). Needs All files access. Returns how many files were moved.
+     * Moves or copies files into [destDir] (absolute path, any volume). Needs All files access.
+     * A move on the same volume is an instant rename; across volumes (internal to SD card) it is
+     * copy + delete, only deleting the original after the copy checks out.
+     * Returns how many files were transferred.
      */
-    suspend fun moveItems(context: Context, items: List<MediaItem>, relativeDir: String): Int =
+    suspend fun transfer(context: Context, items: List<MediaItem>, destDir: String, move: Boolean): Int =
         withContext(Dispatchers.IO) {
-            val root = Environment.getExternalStorageDirectory()
-            val dir = File(root, relativeDir.trimEnd('/')).also { it.mkdirs() }
+            val dir = File(destDir).also { it.mkdirs() }
+            if (!dir.isDirectory) return@withContext 0
             val touched = ArrayList<String>()
-            var moved = 0
+            var done = 0
             for (item in items) {
                 val src = pathOf(context, item.uri)?.let { File(it) } ?: continue
-                if (!src.exists() || src.parentFile == dir) continue
+                if (!src.exists()) continue
+                if (move && src.parentFile?.absolutePath == dir.absolutePath) continue
                 var dest = File(dir, src.name)
                 var n = 1
                 while (dest.exists()) {
-                    dest = File(dir, "${src.nameWithoutExtension} ($n).${src.extension}")
+                    dest = File(dir, "${src.nameWithoutExtension} ($n)" + (if (src.extension.isNotEmpty()) ".${src.extension}" else ""))
                     n++
                 }
-                val ok = src.renameTo(dest) || runCatching {
-                    src.copyTo(dest)
-                    src.delete()
-                }.getOrDefault(false)
+                val ok = if (move) {
+                    src.renameTo(dest) || runCatching {
+                        src.copyTo(dest)
+                        if (dest.length() == src.length()) src.delete() else { dest.delete(); false }
+                    }.getOrDefault(false)
+                } else {
+                    runCatching { src.copyTo(dest); dest.setLastModified(src.lastModified()); true }.getOrDefault(false)
+                }
                 if (ok) {
-                    moved++
-                    touched += src.absolutePath
+                    done++
+                    if (move) touched += src.absolutePath
                     touched += dest.absolutePath
                 }
             }
             if (touched.isNotEmpty()) {
                 val latch = java.util.concurrent.CountDownLatch(touched.size)
                 MediaScannerConnection.scanFile(context, touched.toTypedArray(), null) { _, _ -> latch.countDown() }
-                latch.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                latch.await(15, java.util.concurrent.TimeUnit.SECONDS)
             }
-            moved
+            done
         }
 
     /** Where a brand-new album folder is created. */

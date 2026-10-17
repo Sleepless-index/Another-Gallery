@@ -65,6 +65,7 @@ fun copyToClipboard(context: Context, item: MediaItem) {
 @Composable
 fun InfoSheet(
     item: MediaItem,
+    translucent: Boolean,
     onDismiss: () -> Unit,
     onRename: (String) -> Unit,
 ) {
@@ -79,7 +80,7 @@ fun InfoSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = cs.surface.copy(alpha = 0.72f),
+        containerColor = if (translucent) cs.surface.copy(alpha = 0.72f) else cs.surface,
         contentColor = cs.onBackground,
     ) {
         Column(
@@ -91,13 +92,13 @@ fun InfoSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // Header card: when it was taken
-            Box(Modifier.fillMaxWidth().clip(card).background(cs.surfaceVariant.copy(alpha = 0.6f)).padding(horizontal = 20.dp, vertical = 18.dp)) {
+            Box(Modifier.fillMaxWidth().clip(card).background((if (translucent) cs.surfaceVariant.copy(alpha = 0.6f) else cs.surfaceVariant)).padding(horizontal = 20.dp, vertical = 18.dp)) {
                 Text(whenText, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = cs.onBackground)
             }
 
             // Detail rows
             Column(
-                Modifier.fillMaxWidth().clip(card).background(cs.surfaceVariant.copy(alpha = 0.6f)).padding(vertical = 6.dp),
+                Modifier.fillMaxWidth().clip(card).background((if (translucent) cs.surfaceVariant.copy(alpha = 0.6f) else cs.surfaceVariant)).padding(vertical = 6.dp),
             ) {
                 for (r in info.rows) InfoLine(r, onEdit = if (r.title == "Label" && item.id >= 0) ({ renaming = true }) else null)
             }
