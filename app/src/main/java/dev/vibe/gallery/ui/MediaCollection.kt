@@ -481,7 +481,7 @@ fun SelectionBar(
     val favs by vm.favorites.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val has = selected.isNotEmpty()
-    var picker by remember { mutableStateOf(false) }
+    var picker by remember { mutableStateOf(0) }
 
     PillBar(modifier) {
         if (!trash) {
@@ -499,13 +499,13 @@ fun SelectionBar(
                 modifier = Modifier.weight(1f),
             )
             PillItem(
-                icon = GIcons.Albums, label = "Album", selected = false,
-                onClick = { if (has) picker = true },
+                icon = GIcons.Copy, label = "Copy", selected = false,
+                onClick = { if (has) picker = 1 },
                 modifier = Modifier.weight(1f),
             )
             PillItem(
-                icon = GIcons.Lock, label = "Vault", selected = false,
-                onClick = { if (has) vm.moveToVault(source.filter { it.id in selected }) },
+                icon = GIcons.Move, label = "Move", selected = false,
+                onClick = { if (has) picker = 2 },
                 modifier = Modifier.weight(1f),
             )
             PillItem(
@@ -526,12 +526,12 @@ fun SelectionBar(
             )
         }
     }
-    if (picker) {
+    if (picker != 0) {
         AlbumPickerSheet(
             vm = vm,
             items = source.filter { it.id in selected },
-            initialMove = true,
-            onDismiss = { picker = false },
+            move = picker == 2,
+            onDismiss = { picker = 0 },
         )
     }
 }

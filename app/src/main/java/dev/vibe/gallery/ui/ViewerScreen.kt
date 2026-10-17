@@ -147,6 +147,8 @@ fun ViewerScreen(
             key = { index -> list.getOrNull(index)?.id ?: index.toLong() },
         ) { page ->
             val item = list[page]
+            Box(Modifier.fillMaxSize()) {
+            if (blurOn) AmbientBackdrop(item)
             if (item.isVideo) {
                 VideoPage(
                     item = item,
@@ -163,6 +165,7 @@ fun ViewerScreen(
                     insetBottom = insetBottom,
                     onSwipeDown = onBack,
                 )
+            }
             }
         }
 
@@ -225,21 +228,21 @@ fun ViewerScreen(
                                 )
                             }
                             CompactMenuItem(
-                                text = { Text("Copy to album…") },
+                                text = { Text("Copy…") },
                                 onClick = {
                                     menu = false
                                     picker = false
                                 },
                             )
                             CompactMenuItem(
-                                text = { Text("Move to album…") },
+                                text = { Text("Move…") },
                                 onClick = {
                                     menu = false
                                     picker = true
                                 },
                             )
                             CompactMenuItem(
-                                text = { Text("Move to Vault") },
+                                text = { Text("Hide") },
                                 onClick = {
                                     menu = false
                                     vm.moveToVault(listOf(current))
@@ -311,7 +314,7 @@ fun ViewerScreen(
         InfoSheet(item = current, translucent = blurOn, onDismiss = { showInfo = false }, onRename = { vm.rename(current, it) })
     }
     picker?.let { move ->
-        AlbumPickerSheet(vm = vm, items = listOf(current), initialMove = move, onDismiss = { picker = null })
+        AlbumPickerSheet(vm = vm, items = listOf(current), move = move, onDismiss = { picker = null })
     }
 }
 
@@ -540,5 +543,23 @@ internal fun ZoomableImage(
                     translationY = offset.y
                 },
         )
+    }
+}
+
+
+/** Soft colour wash taken from the photo itself, shown behind it (like the ambient blur in a lot of galleries). */
+@Composable
+private fun AmbientBackdrop(item: MediaItem) {
+    val ctx = LocalContext.current
+    val req = remember(item.uri) { dev.vibe.gallery.data.thumbRequest(ctx, item.uri, 40, item.isVideo) }
+    Box(Modifier.fillMaxSize()) {
+        coil.compose.AsyncImage(
+            model = req,
+            contentDescription = null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
     }
 }
