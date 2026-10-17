@@ -10,7 +10,7 @@ import dev.vibe.gallery.data.Entry
 import dev.vibe.gallery.data.FavoriteEntity
 import dev.vibe.gallery.data.LayoutMode
 import dev.vibe.gallery.data.MediaItem
-import dev.vibe.gallery.data.PlayMode
+import dev.vibe.gallery.data.LoopMode
 import dev.vibe.gallery.data.Prefs
 import dev.vibe.gallery.data.MediaOps
 import dev.vibe.gallery.data.ResumeEntity
@@ -58,7 +58,10 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     fun setResume(v: Boolean) = viewModelScope.launch { g.settings.setResume(v) }
     fun setAutoplay(v: Boolean) = viewModelScope.launch { g.settings.setAutoplay(v) }
     fun setBlur(v: Boolean) = viewModelScope.launch { g.settings.setBlur(v) }
-    fun setPlayMode(v: PlayMode) = viewModelScope.launch { g.settings.setPlayMode(v) }
+    fun setLoop(v: LoopMode) = viewModelScope.launch { g.settings.setLoop(v) }
+    fun setShuffle(v: Boolean) = viewModelScope.launch { g.settings.setShuffle(v) }
+    fun setAutoNext(v: Boolean) = viewModelScope.launch { g.settings.setAutoNext(v) }
+    fun setBgPlay(v: Boolean) = viewModelScope.launch { g.settings.setBgPlay(v) }
     fun setTrashDays(v: Int) = viewModelScope.launch {
         g.settings.setTrashDays(v)
         purgeTrash()
