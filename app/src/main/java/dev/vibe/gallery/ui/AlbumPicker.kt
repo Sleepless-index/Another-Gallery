@@ -53,6 +53,10 @@ fun AlbumPickerSheet(
     var move by remember { mutableStateOf(initialMove) }
     var creating by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val roots = remember { MediaOps.storageRoots(context) }
+    var rootIdx by remember { mutableStateOf(0) }
+    val allFiles = remember { MediaOps.hasAllFiles() }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -73,12 +77,12 @@ fun AlbumPickerSheet(
                 fontWeight = FontWeight.ExtraBold,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ModeChip("Copy", !move) { move = false }
                 ModeChip("Move", move) { move = true }
+                ModeChip("Copy", !move) { move = false }
             }
-            if (move) {
+            if (!allFiles) {
                 Text(
-                    "Originals go to the trash after you confirm.",
+                    "Turn on All files access in Settings to move without prompts and to use the SD card.",
                     fontSize = 12.sp,
                     color = cs.onSurfaceVariant,
                 )
@@ -98,6 +102,11 @@ fun AlbumPickerSheet(
                             Icon(GIcons.Plus, contentDescription = null, tint = cs.primary, modifier = Modifier.size(20.dp))
                             Text("New album", fontWeight = FontWeight.Bold, color = cs.primary)
                         }
+                        if (creating && roots.size > 1) {
+                            Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                roots.forEachIndexed { i, r -> ModeChip(r.first, rootIdx == i) { rootIdx = i } }
+                            }
+                        }
                         if (creating) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -114,7 +123,7 @@ fun AlbumPickerSheet(
                                 TextButton(
                                     enabled = newName.isNotBlank(),
                                     onClick = {
-                                        vm.copyToDir(items, MediaOps.newAlbumDir(newName), move)
+                                        vm.transferToNew(items, roots[rootIdx].second, newName, move)
                                         onDismiss()
                                     },
                                 ) { Text("Create", fontWeight = FontWeight.Bold) }
@@ -129,7 +138,7 @@ fun AlbumPickerSheet(
                             .height(56.dp)
                             .clip(RoundedCornerShape(14.dp))
                             .clickable {
-                                vm.copyToDir(items, MediaOps.albumDir(album), move)
+                                vm.transferToAlbum(items, album, move)
                                 onDismiss()
                             },
                         verticalAlignment = Alignment.CenterVertically,

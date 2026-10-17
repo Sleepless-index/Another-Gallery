@@ -21,6 +21,7 @@ data class Prefs(
     val accent: Int = ACCENT_BLUE,
     val resume: Boolean = true,
     val autoplay: Boolean = true,
+    val blur: Boolean = true,
 ) {
     companion object {
         const val ACCENT_LIME = 0xFFD4FF3A.toInt()
@@ -41,6 +42,7 @@ class SettingsStore(private val context: Context) {
     private val kAccent = intPreferencesKey("accent")
     private val kResume = booleanPreferencesKey("resume")
     private val kAutoplay = booleanPreferencesKey("autoplay")
+    private val kBlur = booleanPreferencesKey("blur")
 
     val flow: Flow<Prefs> = context.dataStore.data.map { p ->
         Prefs(
@@ -50,6 +52,7 @@ class SettingsStore(private val context: Context) {
             accent = p[kAccent] ?: Prefs.ACCENT_BLUE,
             resume = p[kResume] ?: true,
             autoplay = p[kAutoplay] ?: true,
+            blur = p[kBlur] ?: true,
         )
     }
 
@@ -59,4 +62,5 @@ class SettingsStore(private val context: Context) {
     suspend fun setAccent(v: Int) { context.dataStore.edit { it[kAccent] = v } }
     suspend fun setResume(v: Boolean) { context.dataStore.edit { it[kResume] = v } }
     suspend fun setAutoplay(v: Boolean) { context.dataStore.edit { it[kAutoplay] = v } }
+    suspend fun setBlur(v: Boolean) { context.dataStore.edit { it[kBlur] = v } }
 }

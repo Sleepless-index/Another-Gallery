@@ -501,6 +501,24 @@ fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit) {
                 ToggleRow("Autoplay when opened", prefs.autoplay) { vm.setAutoplay(it) }
             }
 
+            SectionLabel("Viewer")
+            CardGroup {
+                ToggleRow("Blur photo behind details", prefs.blur) { vm.setBlur(it) }
+            }
+
+            SectionLabel("Storage")
+            CardGroup {
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                ToggleRow("All files access (move, SD card, no prompts)", dev.vibe.gallery.data.MediaOps.hasAllFiles()) {
+                    runCatching {
+                        ctx.startActivity(
+                            android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                                .setData(android.net.Uri.parse("package:" + ctx.packageName))
+                        )
+                    }
+                }
+            }
+
             SectionLabel("About")
             CardGroup {
                 Row(

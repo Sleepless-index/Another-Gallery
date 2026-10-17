@@ -530,7 +530,7 @@ fun SelectionBar(
         AlbumPickerSheet(
             vm = vm,
             items = source.filter { it.id in selected },
-            initialMove = false,
+            initialMove = true,
             onDismiss = { picker = false },
         )
     }

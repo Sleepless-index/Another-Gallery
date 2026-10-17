@@ -56,6 +56,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     fun setAccent(v: Int) = viewModelScope.launch { g.settings.setAccent(v) }
     fun setResume(v: Boolean) = viewModelScope.launch { g.settings.setResume(v) }
     fun setAutoplay(v: Boolean) = viewModelScope.launch { g.settings.setAutoplay(v) }
+    fun setBlur(v: Boolean) = viewModelScope.launch { g.settings.setBlur(v) }
 
     // ---- media ----------------------------------------------------------
     val items: StateFlow<List<MediaItem>> = repo.items
@@ -213,30 +214,49 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- copy / move to album --------------------------------------------
-    fun copyToDir(list: List<MediaItem>, relativeDir: String, move: Boolean) {
+    fun transferToAlbum(list: List<MediaItem>, album: Album, move: Boolean) {
         if (list.isEmpty()) return
         viewModelScope.launch {
-            val name = relativeDir.trimEnd('/').substringAfterLast('/')
-            if (move && MediaOps.hasAllFiles()) {
-                val n = MediaOps.moveItems(getApplication(), list, relativeDir)
-                clearSelection()
-                _viewerList.value = _viewerList.value.filter { v -> list.none { it.id == v.id } || n == 0 }
-                refresh()
-                message(if (n > 0) "Moved $n to $name" else "Couldn't move those files")
-                return@launch
-            }
-            val done = MediaOps.copyItems(getApplication(), list, relativeDir)
-            clearSelection()
-            if (done.isEmpty()) {
-                message("Couldn't copy those files")
-                return@launch
-            }
-            message(if (move) "Moved ${done.size} to ${relativeDir.trimEnd('/').substringAfterLast('/')}"
-            else "Copied ${done.size} to ${relativeDir.trimEnd('/').substringAfterLast('/')}")
-            refresh()
-            // "Move" = copy first, then send the originals to the trash (the system asks to confirm).
-            if (move) requestTrash(done)
+            val dir = MediaOps.albumAbsDir(getApplication(), album)
+            if (dir == null) message("Couldn't find that album's folder") else doTransfer(list, dir, move)
         }
+    }
+
+    fun transferToNew(list: List<MediaItem>, root: String, name: String, move: Boolean) {
+        if (list.isEmpty()) return
+        val clean = name.trim().replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { "New album" }
+        viewModelScope.launch { doTransfer(list, "$root/Pictures/$clean", move) }
+    }
+
+    private suspend fun doTransfer(list: List<MediaItem>, dir: String, move: Boolean) {
+        val app = getApplication<Application>()
+        val name = dir.trimEnd('/').substringAfterLast('/')
+        val verb = if (move) "Moved" else "Copied"
+        if (MediaOps.hasAllFiles()) {
+            if (list.size > 2) message(if (move) "Moving…" else "Copying…")
+            val n = MediaOps.transfer(app, list, dir, move)
+            clearSelection()
+            if (move && n > 0) _viewerList.value = _viewerList.value.filter { v -> list.none { it.id == v.id } }
+            refresh()
+            message(if (n > 0) "$verb $n to $name" else "Couldn't ${if (move) "move" else "copy"} those files")
+            return
+        }
+        // Without All files access we can only reach the internal Pictures/ and DCIM/ folders.
+        val internal = android.os.Environment.getExternalStorageDirectory().absolutePath
+        if (!dir.startsWith("$internal/")) {
+            message("Turn on All files access in Settings to use the SD card")
+            return
+        }
+        val rel = dir.removePrefix("$internal/").trimEnd('/') + "/"
+        val done = MediaOps.copyItems(app, list, rel)
+        clearSelection()
+        if (done.isEmpty()) {
+            message("Couldn't ${if (move) "move" else "copy"} those files")
+            return
+        }
+        message("$verb ${done.size} to $name")
+        refresh()
+        if (move) requestTrash(done)
     }
 
     // ---- vault ----------------------------------------------------------
