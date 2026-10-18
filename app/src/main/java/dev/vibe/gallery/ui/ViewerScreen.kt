@@ -610,7 +610,7 @@ private fun AmbientBackdrop(item: MediaItem) {
             contentDescription = null,
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
-            modifier = Modifier.fillMaxSize().blur(24.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded),
+            modifier = Modifier.fillMaxSize().blur(64.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded),
         )
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
     }

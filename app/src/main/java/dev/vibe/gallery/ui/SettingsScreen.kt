@@ -414,7 +414,7 @@ fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit, onOpenPermissions: 
                 ) { MasonryPreview() }
             }
 
-            CardGroup(Modifier.padding(top = 10.dp)) {
+            CardGroup {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -523,26 +523,13 @@ fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit, onOpenPermissions: 
 
             if (Build.VERSION.SDK_INT >= 30) {
                 SectionLabel("Trash")
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    listOf(0 to "Never", 7 to "7 days", 15 to "15 days", 30 to "30 days").forEach { (d, label) ->
-                        ThemeChip(
-                            label = label,
-                            active = prefs.trashDays == d,
-                            onClick = { vm.setTrashDays(d) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
                 Text(
-                    "Auto-empty deletes old trash for good. It runs when the app opens and needs All files access.",
+                    "Deleted items stay in the trash for 30 days, then are removed for good. Needs All files access.",
                     fontSize = 12.sp,
                     color = cs.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp),
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp),
                 )
-                CardGroup(Modifier.padding(top = 10.dp)) {
+                CardGroup {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

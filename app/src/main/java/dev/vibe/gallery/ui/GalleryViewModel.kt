@@ -62,10 +62,6 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     fun setShuffle(v: Boolean) = viewModelScope.launch { g.settings.setShuffle(v) }
     fun setAutoNext(v: Boolean) = viewModelScope.launch { g.settings.setAutoNext(v) }
     fun setBgPlay(v: Boolean) = viewModelScope.launch { g.settings.setBgPlay(v) }
-    fun setTrashDays(v: Int) = viewModelScope.launch {
-        g.settings.setTrashDays(v)
-        purgeTrash()
-    }
 
     // ---- media ----------------------------------------------------------
     /** Everything MediaStore returned, including items in hidden albums. */
@@ -134,8 +130,8 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Permanently removes items that have sat in the trash longer than the chosen number of days. */
     private suspend fun purgeTrash() {
-        val days = prefs.value.trashDays
-        if (days <= 0 || !MediaOps.hasAllFiles()) return
+        val days = 30
+        if (!MediaOps.hasAllFiles()) return
         val cutoff = System.currentTimeMillis() - days * 24L * 3600 * 1000
         val old = _trashed.value.filter { it.trashedMs in 1 until cutoff }
         if (old.isEmpty()) return
