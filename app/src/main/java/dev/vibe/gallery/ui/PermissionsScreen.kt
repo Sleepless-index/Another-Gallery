@@ -44,29 +44,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.vibe.gallery.ui.theme.GIcons
 
-/** What the app has been allowed to do. */
-data class PermState(
-    val images: Boolean,
-    val videos: Boolean,
-    val allFiles: Boolean,
-    val location: Boolean,
-) {
-    val media: Boolean get() = images && videos
-    val all: Boolean get() = media && allFiles && location
+/** What the app has been allowed to do. One permission: access to all files. */
+data class PermState(val allFiles: Boolean) {
+    val media: Boolean get() = allFiles
+    val all: Boolean get() = allFiles
 }
 
 /**
- * Lists every permission the app can use, what it is for, and whether it has been granted.
+ * Explains the single permission the app needs and whether it has been granted.
  * First-run gate when [onBack] is null; reachable from Settings afterwards.
  */
 @Composable
 fun PermissionsScreen(
     state: PermState,
     onGrantAll: () -> Unit,
-    onRequestMedia: () -> Unit,
-    onRequestAllFiles: () -> Unit,
-    onRequestLocation: () -> Unit,
-    onContinue: () -> Unit,
     onBack: (() -> Unit)? = null,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -89,7 +80,7 @@ fun PermissionsScreen(
                 verticalArrangement = Arrangement.spacedBy(9.dp),
             ) {
                 Text(
-                    "Permissions",
+                    "Permission",
                     fontSize = 26.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = cs.onBackground,
@@ -97,54 +88,24 @@ fun PermissionsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    "Gallery only uses what it needs to show and manage your media. Tap a permission to learn why.",
+                    "Gallery needs one permission to show and manage your media. Tap it to learn why.",
                     fontSize = 13.sp,
                     color = cs.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
                 )
                 PermCard(
-                    icon = GIcons.Image,
-                    title = "Read Media Images",
-                    optional = false,
-                    granted = state.images,
-                    why = "Needed to show the photos stored on your phone. Nothing is uploaded anywhere.",
-                    onAllow = onRequestMedia,
-                )
-                PermCard(
-                    icon = GIcons.VideoAlbum,
-                    title = "Read Media Videos",
-                    optional = false,
-                    granted = state.videos,
-                    why = "Needed to show and play your videos.",
-                    onAllow = onRequestMedia,
-                )
-                PermCard(
-                    icon = GIcons.Location,
-                    title = "Access Media Location",
-                    optional = true,
-                    granted = state.location,
-                    why = "Lets the details sheet show where a photo was taken. Skip it and everything else still works.",
-                    onAllow = onRequestLocation,
-                )
-                PermCard(
                     icon = GIcons.Move,
-                    title = "All Files Access",
-                    optional = true,
+                    title = "Access to all files",
+                    optional = false,
                     granted = state.allFiles,
-                    why = "Lets you move files between albums and to the SD card, and delete or rename without extra prompts. Without it you can still copy, favorite, share and delete.",
-                    onAllow = onRequestAllFiles,
+                    why = "Lets Gallery read your photos and videos (including on the SD card), move and rename files and albums, read a photo's location, and delete without extra prompts. Nothing leaves your phone.",
+                    onAllow = onGrantAll,
                 )
                 Box(Modifier.size(8.dp))
             }
-            val ready = state.media
-            val label = when {
-                !state.all -> "Grant Permissions"
-                onBack == null -> "Continue"
-                else -> "All set"
-            }
             Text(
-                label,
+                if (state.allFiles) (if (onBack == null) "Continue" else "All set") else "Grant access",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = cs.onPrimary,
@@ -157,30 +118,11 @@ fun PermissionsScreen(
                     .background(cs.primary)
                     .bounceClick(
                         onClick = {
-                            when {
-                                !state.all -> onGrantAll()
-                                onBack == null -> onContinue()
-                                else -> onBack()
-                            }
+                            if (!state.allFiles) onGrantAll() else onBack?.invoke()
                         },
                     )
                     .padding(vertical = 13.dp),
             )
-            if (onBack == null && ready && !state.all) {
-                Text(
-                    "Continue without the optional ones",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = cs.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .navigationBarsPadding()
-                        .fillMaxWidth()
-                        .padding(bottom = 14.dp)
-                        .bounceClick(onClick = onContinue)
-                        .padding(8.dp),
-                )
-            }
         }
     }
 }

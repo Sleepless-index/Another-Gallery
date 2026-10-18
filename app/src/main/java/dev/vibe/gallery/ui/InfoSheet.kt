@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.exifinterface.media.ExifInterface
 import dev.vibe.gallery.data.MediaItem
+import dev.vibe.gallery.data.MediaOps
 import dev.vibe.gallery.data.formatDuration
 import dev.vibe.gallery.data.formatSize
 import dev.vibe.gallery.ui.theme.GIcons
@@ -187,7 +188,9 @@ private suspend fun readInfo(context: Context, item: MediaItem): Info =
         var ppi: String? = null
         var exif: ExifInterface? = null
         if (!item.isVideo && item.id >= 0) {
-            exif = runCatching { openExif(context, MediaStore.setRequireOriginal(item.uri)) }.getOrNull()
+            // With All files access the original file (GPS and all) can be read straight from disk.
+            exif = (if (path != null && MediaOps.hasAllFiles()) runCatching { ExifInterface(path) }.getOrNull() else null)
+                ?: runCatching { openExif(context, MediaStore.setRequireOriginal(item.uri)) }.getOrNull()
                 ?: runCatching { openExif(context, item.uri) }.getOrNull()
             val x = exif?.getAttributeDouble(ExifInterface.TAG_X_RESOLUTION, 0.0) ?: 0.0
             val y = exif?.getAttributeDouble(ExifInterface.TAG_Y_RESOLUTION, 0.0) ?: 0.0
