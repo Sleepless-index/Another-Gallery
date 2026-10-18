@@ -110,7 +110,7 @@ class PlaybackService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val b = NotificationCompat.Builder(this, CHANNEL)
-            .setSmallIcon(if (playing) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause)
+            .setSmallIcon(if (playing) R.drawable.ic_notif_play else R.drawable.ic_notif_pause)
             .setContentTitle(title)
             .setContentText(if (playing) "Playing" else "Paused")
             .setSubText("Gallery")
@@ -121,14 +121,14 @@ class PlaybackService : Service() {
             .setOnlyAlertOnce(true)
             .setOngoing(true)
             .setSilent(true)
-            .addAction(android.R.drawable.ic_media_previous, "Previous", action(1, ACTION_PREV))
+            .addAction(R.drawable.ic_notif_prev, "Previous", action(1, ACTION_PREV))
             .addAction(
-                if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+                if (playing) R.drawable.ic_notif_pause else R.drawable.ic_notif_play,
                 if (playing) "Pause" else "Play",
                 action(2, ACTION_TOGGLE),
             )
-            .addAction(android.R.drawable.ic_media_next, "Next", action(3, ACTION_NEXT))
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Close", action(4, ACTION_CLOSE))
+            .addAction(R.drawable.ic_notif_next, "Next", action(3, ACTION_NEXT))
+            .addAction(R.drawable.ic_notif_close, "Close", action(4, ACTION_CLOSE))
         PlaybackBridge.session?.let {
             b.setStyle(MediaStyleNotificationHelper.MediaStyle(it).setShowActionsInCompactView(0, 1, 2))
         }
