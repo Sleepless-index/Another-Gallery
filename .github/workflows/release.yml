@@ -21,6 +21,13 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Resolve version
+        id: ver
+        run: |
+          V=$(grep -m1 'versionName' app/build.gradle.kts | sed -E 's/.*"(.*)".*/\1/')
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAG="$GITHUB_REF_NAME"; else TAG="v$V"; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Decode keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -37,16 +44,17 @@ jobs:
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --stacktrace
-          mv app/build/outputs/apk/release/*.apk "gallery-${GITHUB_REF_NAME}.apk"
+          mv app/build/outputs/apk/release/*.apk "haze-${{ steps.ver.outputs.tag }}.apk"
 
       - uses: actions/upload-artifact@v4
         with:
           name: gallery-signed-apk
-          path: gallery-*.apk
+          path: haze-*.apk
 
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: gallery-*.apk
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: Haze ${{ steps.ver.outputs.tag }}
+          files: haze-*.apk
           generate_release_notes: true
