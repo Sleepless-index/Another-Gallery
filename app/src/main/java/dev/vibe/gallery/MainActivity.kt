@@ -38,8 +38,8 @@ import kotlinx.coroutines.launch
 class MainActivity : FragmentActivity() {
 
     private val vm: GalleryViewModel by viewModels()
-    private val perms = mutableStateOf(PermState(false, false, false, false))
-    private var chainAllFiles = false
+    private val perms = mutableStateOf(PermState(false))
+    private var askedMedia = false
 
     /** Android 10 only: files we must delete one by one, asking permission for each. */
     private val legacyDeleteQueue = ArrayDeque<Uri>()
@@ -69,10 +69,6 @@ class MainActivity : FragmentActivity() {
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             updatePermission()
-            if (chainAllFiles) {
-                chainAllFiles = false
-                if (!perms.value.allFiles) openAllFilesSettings()
-            }
         }
 
     private fun mediaPermissions(): Array<String> =
@@ -106,31 +102,19 @@ class MainActivity : FragmentActivity() {
         ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
 
     private fun updatePermission() {
-        val images = if (Build.VERSION.SDK_INT >= 33) granted(Manifest.permission.READ_MEDIA_IMAGES)
+        // Android 11+: "All files access". Android 10 has no such thing, so plain storage access stands in.
+        val all = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()
         else granted(Manifest.permission.READ_EXTERNAL_STORAGE)
-        val videos = if (Build.VERSION.SDK_INT >= 33) granted(Manifest.permission.READ_MEDIA_VIDEO)
-        else granted(Manifest.permission.READ_EXTERNAL_STORAGE)
-        if (images && videos && !perms.value.media) vm.refresh()
-        perms.value = PermState(
-            images = images,
-            videos = videos,
-            allFiles = Build.VERSION.SDK_INT >= 30 && Environment.isExternalStorageManager(),
-            location = granted(Manifest.permission.ACCESS_MEDIA_LOCATION),
-        )
+        if (all && !perms.value.allFiles) vm.refresh()
+        perms.value = PermState(allFiles = all)
     }
 
-    /** One tap: ask for everything missing, then send the user to the All files page. */
+    /** One tap: send the user to the All files page (or ask for storage on Android 10). */
     private fun grantAll() {
-        val missing = buildList {
-            if (!perms.value.media) addAll(mediaPermissions())
-            if (!perms.value.location) add(Manifest.permission.ACCESS_MEDIA_LOCATION)
-        }
-        chainAllFiles = !perms.value.allFiles
-        if (missing.isEmpty()) {
-            chainAllFiles = false
+        if (Build.VERSION.SDK_INT >= 30) {
             openAllFilesSettings()
         } else {
-            permissionLauncher.launch(missing.toTypedArray())
+            permissionLauncher.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE))
         }
     }
 
@@ -150,6 +134,18 @@ class MainActivity : FragmentActivity() {
         vm.startObserving()
 
         lifecycleScope.launch {
+            vm.loaded.collect { loaded ->
+                if (loaded && !askedMedia && perms.value.allFiles && vm.allItems.value.isEmpty() &&
+                    Build.VERSION.SDK_INT >= 33 && !hasMediaPermission()
+                ) {
+                    // Some devices still want the media permission for MediaStore; ask once, quietly.
+                    askedMedia = true
+                    permissionLauncher.launch(mediaPermissions())
+                }
+            }
+        }
+
+        lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 vm.events.collect { handleEvent(it) }
             }
@@ -162,9 +158,6 @@ class MainActivity : FragmentActivity() {
                     vm = vm,
                     perms = perms.value,
                     onGrantAll = { grantAll() },
-                    onRequestMedia = { permissionLauncher.launch(mediaPermissions()) },
-                    onRequestAllFiles = { openAllFilesSettings() },
-                    onRequestLocation = { permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_MEDIA_LOCATION)) },
                     onAuthenticate = { ok -> authenticate(ok) },
                     onSecure = { secure ->
                         if (secure) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
