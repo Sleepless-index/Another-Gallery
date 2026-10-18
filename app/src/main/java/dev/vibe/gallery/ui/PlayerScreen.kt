@@ -97,6 +97,13 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaMetadata
 import androidx.media3.session.MediaSession
 import androidx.compose.runtime.key
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.ui.zIndex
 import dev.vibe.gallery.PlaybackBridge
 import dev.vibe.gallery.R
@@ -169,10 +176,17 @@ private fun RoundChrome(icon: ImageVector, desc: String, size: Int = 44, tint: C
 }
 
 @Composable
-private fun SkipButton(icon: ImageVector, desc: String, enabled: Boolean, onClick: () -> Unit) {
+private fun SkipButton(
+    icon: ImageVector,
+    desc: String,
+    enabled: Boolean,
+    box: Dp = 44.dp,
+    iconSize: Dp = 26.dp,
+    onClick: () -> Unit,
+) {
     Box(
         Modifier
-            .size(44.dp)
+            .size(box)
             .clip(CircleShape)
             .then(if (enabled) Modifier.bounceClick(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
@@ -180,7 +194,7 @@ private fun SkipButton(icon: ImageVector, desc: String, enabled: Boolean, onClic
         Icon(
             icon, contentDescription = desc,
             tint = Color.White.copy(alpha = if (enabled) 1f else 0.3f),
-            modifier = Modifier.size(26.dp),
+            modifier = Modifier.size(iconSize),
         )
     }
 }
@@ -210,6 +224,71 @@ private fun findSiblingSubtitles(context: Context, item: MediaItem): List<ExoMed
         if (f.isFile) subtitleConfig(android.net.Uri.fromFile(f), f.name) else null
     }
 }
+
+/** Thin full-width seek bar with a round thumb. */
+@Composable
+private fun SeekBar(
+    fraction: Float,
+    scrubbing: Boolean,
+    onChange: (Float) -> Unit,
+    onFinish: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val cs = MaterialTheme.colorScheme
+    val density = LocalDensity.current
+    var widthPx by remember { mutableFloatStateOf(1f) }
+    val thumb by animateDpAsState(if (scrubbing) 20.dp else 14.dp, tween(120), label = "seekThumb")
+    Box(
+        modifier = modifier
+            .padding(horizontal = 12.dp)
+            .height(32.dp)
+            .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { o ->
+                    onChange((o.x / widthPx).coerceIn(0f, 1f))
+                    onFinish()
+                })
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { o -> onChange((o.x / widthPx).coerceIn(0f, 1f)) },
+                    onDragEnd = { onFinish() },
+                    onDragCancel = { onFinish() },
+                    onHorizontalDrag = { change, _ ->
+                        change.consume()
+                        onChange((change.position.x / widthPx).coerceIn(0f, 1f))
+                    },
+                )
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.32f)),
+        )
+        Box(
+            Modifier
+                .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                .height(3.dp)
+                .clip(CircleShape)
+                .background(cs.primary),
+        )
+        Box(
+            Modifier
+                .offset {
+                    val thumbPx = with(density) { thumb.toPx() }
+                    IntOffset((fraction.coerceIn(0f, 1f) * widthPx - thumbPx / 2f).roundToInt(), 0)
+                }
+                .size(thumb)
+                .clip(CircleShape)
+                .background(cs.primary),
+        )
+    }
+}
+
 
 private fun exoItemFor(v: MediaItem, subs: List<ExoMediaItem.SubtitleConfiguration>): ExoMediaItem =
     ExoMediaItem.Builder()
@@ -879,6 +958,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
             exit = fadeOut(tween(160)),
         ) {
             Box(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.18f)))
                 Box(
                     Modifier
                         .fillMaxWidth()
@@ -1026,6 +1106,40 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                     }
                 }
 
+                // centre controls: previous / play / next, no background
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(36.dp),
+                ) {
+                    SkipButton(GIcons.SkipPrevious, "Previous video", hasPrev, box = 52.dp, iconSize = 34.dp) {
+                        player.seekToPreviousMediaItem()
+                        player.play()
+                        interaction++
+                    }
+                    Box(
+                        Modifier
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .bounceClick(onClick = { togglePlay(); interaction++ }),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Crossfade(targetState = isPlaying, animationSpec = tween(160), label = "playPause") { playing ->
+                            Icon(
+                                imageVector = if (playing) GIcons.Pause else GIcons.Play,
+                                contentDescription = if (playing) "Pause" else "Play",
+                                tint = Color.White,
+                                modifier = Modifier.size(48.dp),
+                            )
+                        }
+                    }
+                    SkipButton(GIcons.SkipNext, "Next video", hasNext, box = 52.dp, iconSize = 34.dp) {
+                        player.seekToNextMediaItem()
+                        player.play()
+                        interaction++
+                    }
+                }
+
                 // bottom bar
                 AnimatedVisibility(
                     visible = showControls,
@@ -1121,105 +1235,18 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                             RoundChrome(GIcons.Fit, "Fit or fill screen", 36) { fill = !fill }
                         }
 
-                        // Prev / play / next live together in one pill.
-                        val transport: @Composable () -> Unit = {
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(28.dp))
-                                    .background(PlayerChrome)
-                                    .padding(horizontal = 6.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                SkipButton(GIcons.SkipPrevious, "Previous video", hasPrev) {
-                                    player.seekToPreviousMediaItem()
-                                    player.play()
-                                    interaction++
-                                }
-                                Box(
-                                    Modifier
-                                        .size(44.dp)
-                                        .clip(CircleShape)
-                                        .bounceClick(onClick = { togglePlay(); interaction++ }),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Crossfade(targetState = isPlaying, animationSpec = tween(160), label = "playPause") { playing ->
-                                        Icon(
-                                            imageVector = if (playing) GIcons.Pause else GIcons.Play,
-                                            contentDescription = if (playing) "Pause" else "Play",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(28.dp),
-                                        )
-                                    }
-                                }
-                                SkipButton(GIcons.SkipNext, "Next video", hasNext) {
-                                    player.seekToNextMediaItem()
-                                    player.play()
-                                    interaction++
-                                }
-                            }
-                        }
-
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .displayCutoutPadding()
-                            .padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
+                            .padding(bottom = 6.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        if (!landNow) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                            ) {
-                                audioChip()
-                                loopButton()
-                                queueButton()
-                            }
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(
-                                formatDuration(if (scrubbing) (scrubValue * duration).toLong() else position),
-                                color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(44.dp),
-                            )
-                            val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
-                            Slider(
-                                value = if (scrubbing) scrubValue else fraction,
-                                onValueChange = {
-                                    scrubbing = true
-                                    scrubValue = it
-                                },
-                                onValueChangeFinished = {
-                                    val target = (scrubValue * duration).toLong()
-                                    player.seekTo(target)
-                                    position = target
-                                    scrubbing = false
-                                    interaction++
-                                },
-                                thumb = {
-                                    Box(
-                                        Modifier
-                                            .size(width = 4.dp, height = 22.dp)
-                                            .clip(CircleShape)
-                                            .background(cs.primary)
-                                    )
-                                },
-                                colors = SliderDefaults.colors(
-                                    thumbColor = cs.primary,
-                                    activeTrackColor = cs.primary,
-                                    inactiveTrackColor = Color.White.copy(alpha = 0.22f),
-                                ),
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                formatDuration(duration),
-                                color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.width(44.dp),
-                            )
-                        }
-                        Box(Modifier.fillMaxWidth()) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp),
+                        ) {
                             Row(
                                 modifier = Modifier.align(Alignment.CenterStart),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -1227,22 +1254,48 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                             ) {
                                 lockButton()
                                 speedChip()
-                                if (landNow) audioChip()
+                                audioChip()
                             }
-                            Box(Modifier.align(Alignment.Center)) { transport() }
                             Row(
                                 modifier = Modifier.align(Alignment.CenterEnd),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                if (landNow) {
-                                    loopButton()
-                                    queueButton()
-                                }
+                                loopButton()
+                                queueButton()
                                 rotateButton()
                                 fitButton()
                             }
                         }
+                        Text(
+                            text = formatDuration(if (scrubbing) (scrubValue * duration).toLong() else position) +
+                                " / " + formatDuration(duration),
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .padding(start = 24.dp, top = 6.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(PlayerChrome)
+                                .padding(horizontal = 14.dp, vertical = 7.dp),
+                        )
+                        val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+                        SeekBar(
+                            fraction = if (scrubbing) scrubValue else fraction,
+                            scrubbing = scrubbing,
+                            onChange = {
+                                scrubbing = true
+                                scrubValue = it
+                            },
+                            onFinish = {
+                                val target = (scrubValue * duration).toLong()
+                                player.seekTo(target)
+                                position = target
+                                scrubbing = false
+                                interaction++
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                 }
             }
