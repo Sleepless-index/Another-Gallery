@@ -1,37 +1,37 @@
-# Gallery
+<h1 align="center">Haze</h1>
 
-A fast, local-only personal gallery for Android 10+ (API 29+). AMOLED-minimal design, Kotlin + Jetpack Compose.
+<p align="center">
+A fast, local-only gallery for Android. AMOLED-minimal, no network, no tracking.
+</p>
 
 ## Features
 
-- **Photos**: uniform grid (2-6 columns) or masonry feed, switchable in Settings. Photos and videos mixed, date headers, fast-scroll bar with month bubble.
-- **Multi-select**: long-press or the check button. Share, favorite, delete (system trash on Android 11+).
-- **Albums**: folders, plus Favorites, Videos and Trash (Android 11+).
-- **Search**: by file name, album or month, with Photos / Videos / Favorites filters.
-- **Viewer**: swipe between items, pinch and double-tap zoom, swipe up for details (EXIF, size, path), swipe down to close.
-- **Video player** (Media3 / ExoPlayer): brightness (left swipe), volume (right swipe), swipe to seek, double-tap +/-10s, hold for 2x, speed, audio tracks, subtitles, resume position, lock, rotate, fit/fill, picture-in-picture.
-- **Editor**: crop (aspect presets), rotate, flip, straighten, brightness / contrast / saturation / warmth, 8 filters. Saves a **copy** to `Pictures/Edited`; originals are never touched.
-- **Settings**: layout, columns, accent color (Lime, Blue, Pink, White, Sky, or fully custom), theme (AMOLED / Dark / Light).
+- Grid or masonry timeline, fast scroller, search by name, album or month
+- Albums with pin, rename, hide and delete; Favorites, Videos, Trash
+- Viewer with zoom, EXIF/info sheet and blurred ambient background
+- Non-destructive editor: crop, rotate, straighten, adjustments, filters (saves a copy)
+- Video player on Media3: gestures, playback queue with loop/shuffle/autoplay, subtitles, audio tracks, resume, background play, PiP, mirror
+- Theming: AMOLED / Dark / Light, custom accent color
 
-## Build the APK
+## Install
 
-### Option A: GitHub Actions (no setup)
+Grab the latest APK from [Releases](../../releases). Requires Android 10+.
 
-1. Create a new GitHub repository and push this folder to it.
-2. Open the repo's **Actions** tab. The **Build APK** workflow runs on every push.
-3. When it finishes, download the artifact:
-   - `gallery-release-apk`: optimized, much smoother scrolling (use this one), signed with the debug key.
-   - `gallery-debug-apk`: slower, for debugging.
-4. Copy the APK to your phone and install it (allow "install unknown apps").
+Haze asks for media access and, optionally, All files access (used for faster folder operations, EXIF from the real file and the 30-day trash purge).
 
-### Option B: Android Studio
+## Build
 
-Open this folder in Android Studio (Ladybug or newer), let Gradle sync, then **Build > Build APK(s)**,
-or run `./gradlew assembleRelease` and look in `app/build/outputs/apk/release/`.
+```
+./gradlew assembleRelease
+```
+
+Release builds use the debug key unless `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD` are set. Tagging `v*` runs the release workflow, which signs with the repository secrets of the same names (plus `KEYSTORE_BASE64`).
+
+## Stack
+
+Kotlin, Jetpack Compose, Room, DataStore, Coil, Media3. Package `dev.vibe.gallery`, min SDK 29.
 
 ## Notes
 
-- Min SDK 29, target SDK 35. Package: `dev.vibe.gallery`.
-- Everything stays on the device. No network permission is requested.
-- Video: Media3 plays most formats through the phone's hardware decoders. Some rare audio codecs (DTS, certain AC3/E-AC3 variants) depend on the device. An FFmpeg extension can be added later for those.
-- On Android 10 there is no system trash, so Delete removes files permanently after the system confirmation.
+- Android 10 has no system trash, so deleting there is permanent after the system prompt.
+- Rare audio codecs (DTS, some E-AC3) depend on the device's decoders.
