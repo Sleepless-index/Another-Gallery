@@ -1036,67 +1036,100 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                         val landNow = config.orientation == Configuration.ORIENTATION_LANDSCAPE
                         val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
 
-                        val leftChips: @Composable () -> Unit = {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (landNow) {
-                                    PlayerChip("Lock", GIcons.Lock) {
-                                        locked = true
-                                        controls = false
-                                    }
-                                } else {
-                                    RoundChrome(GIcons.Lock, "Lock", 36) {
-                                        locked = true
-                                        controls = false
-                                    }
-                                }
+                        val audioChip: @Composable () -> Unit = {
+                            // Only worth showing when the file really has several audio tracks.
+                            if (audioGroups.size > 1) {
                                 Box {
-                                    PlayerChip("${if (speed % 1f == 0f) speed.toInt().toString() else speed.toString()}x", null, accent = true) {
-                                        speedMenu = true
-                                    }
-                                    DropdownMenu(expanded = speedMenu, onDismissRequest = { speedMenu = false }) {
-                                        listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { sp ->
+                                    val selectedIdx = audioGroups.indexOfFirst { it.isSelected }
+                                    PlayerChip(
+                                        text = "Audio ${selectedIdx.coerceAtLeast(0) + 1}",
+                                        icon = GIcons.Audio,
+                                    ) { audioMenu = true }
+                                    DropdownMenu(expanded = audioMenu, onDismissRequest = { audioMenu = false }) {
+                                        audioGroups.forEachIndexed { i, g ->
                                             CompactMenuItem(
-                                                text = { Text("${sp}x") },
+                                                text = { Text(trackLabel(g, i, "Audio")) },
                                                 onClick = {
-                                                    speedMenu = false
-                                                    speed = sp
-                                                    player.setPlaybackSpeed(sp)
+                                                    audioMenu = false
+                                                    player.trackSelectionParameters = player.trackSelectionParameters
+                                                        .buildUpon()
+                                                        .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0))
+                                                        .build()
                                                 },
                                             )
-                                        }
-                                    }
-                                }
-                                // Only worth showing when the file really has several audio tracks.
-                                if (audioGroups.size > 1) {
-                                    Box {
-                                        val selectedIdx = audioGroups.indexOfFirst { it.isSelected }
-                                        PlayerChip(
-                                            text = "Audio ${selectedIdx.coerceAtLeast(0) + 1}",
-                                            icon = GIcons.Audio,
-                                        ) { audioMenu = true }
-                                        DropdownMenu(expanded = audioMenu, onDismissRequest = { audioMenu = false }) {
-                                            audioGroups.forEachIndexed { i, g ->
-                                                CompactMenuItem(
-                                                    text = { Text(trackLabel(g, i, "Audio")) },
-                                                    onClick = {
-                                                        audioMenu = false
-                                                        player.trackSelectionParameters = player.trackSelectionParameters
-                                                            .buildUpon()
-                                                            .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0))
-                                                            .build()
-                                                    },
-                                                )
-                                            }
                                         }
                                     }
                                 }
                             }
                         }
 
+                        val lockButton: @Composable () -> Unit = {
+                            if (landNow) {
+                                PlayerChip("Lock", GIcons.Lock) {
+                                    locked = true
+                                    controls = false
+                                }
+                            } else {
+                                RoundChrome(GIcons.Lock, "Lock", 36) {
+                                    locked = true
+                                    controls = false
+                                }
+                            }
+                        }
+
+                        val speedChip: @Composable () -> Unit = {
+                            Box {
+                                PlayerChip("${if (speed % 1f == 0f) speed.toInt().toString() else speed.toString()}x", null, accent = true) {
+                                    speedMenu = true
+                                }
+                                DropdownMenu(expanded = speedMenu, onDismissRequest = { speedMenu = false }) {
+                                    listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { sp ->
+                                        CompactMenuItem(
+                                            text = { Text("${sp}x") },
+                                            onClick = {
+                                                speedMenu = false
+                                                speed = sp
+                                                player.setPlaybackSpeed(sp)
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        val loopButton: @Composable () -> Unit = {
+                            RoundChrome(
+                                if (prefs.loop == LoopMode.REPEAT) GIcons.RepeatOne else GIcons.Repeat,
+                                "Loop",
+                                36,
+                                tint = if (prefs.loop == LoopMode.OFF) Color.White else cs.primary,
+                            ) { cycleLoop() }
+                        }
+                        val queueButton: @Composable () -> Unit = {
+                            RoundChrome(GIcons.Playlist, "Queue", 36) { queueSheet = true }
+                        }
+                        val rotateButton: @Composable () -> Unit = {
+                            RoundChrome(GIcons.ScreenRotate, "Rotate screen", 36) {
+                                activity?.requestedOrientation = if (landNow) {
+                                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                                } else {
+                                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                                }
+                            }
+                        }
+                        val fitButton: @Composable () -> Unit = {
+                            RoundChrome(GIcons.Fit, "Fit or fill screen", 36) { fill = !fill }
+                        }
+
+                        // Prev / play / next live together in one pill.
                         val transport: @Composable () -> Unit = {
                             Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(28.dp))
+                                    .background(PlayerChrome)
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 SkipButton(GIcons.SkipPrevious, "Previous video", hasPrev) {
                                     player.seekToPreviousMediaItem()
@@ -1105,9 +1138,8 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                 }
                                 Box(
                                     Modifier
-                                        .size(52.dp)
+                                        .size(44.dp)
                                         .clip(CircleShape)
-                                        .background(cs.primary)
                                         .bounceClick(onClick = { togglePlay(); interaction++ }),
                                     contentAlignment = Alignment.Center,
                                 ) {
@@ -1115,8 +1147,8 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                         Icon(
                                             imageVector = if (playing) GIcons.Pause else GIcons.Play,
                                             contentDescription = if (playing) "Pause" else "Play",
-                                            tint = cs.onPrimary,
-                                            modifier = Modifier.size(24.dp),
+                                            tint = Color.White,
+                                            modifier = Modifier.size(28.dp),
                                         )
                                     }
                                 }
@@ -1128,27 +1160,6 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                             }
                         }
 
-                        val rightButtons: @Composable () -> Unit = {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                RoundChrome(
-                                    if (prefs.loop == LoopMode.REPEAT) GIcons.RepeatOne else GIcons.Repeat,
-                                    "Loop",
-                                    36,
-                                    tint = if (prefs.loop == LoopMode.OFF) Color.White else cs.primary,
-                                ) { cycleLoop() }
-                                RoundChrome(GIcons.Playlist, "Queue", 36) { queueSheet = true }
-                                RoundChrome(GIcons.ScreenRotate, "Rotate screen", 36) {
-                                    activity?.requestedOrientation = if (landNow) {
-                                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-                                    } else {
-                                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                                    }
-                                }
-                                RoundChrome(GIcons.Fit, "Fit or fill screen", 36) { fill = !fill }
-                            }
-                        }
-
-
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1156,13 +1167,16 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                             .padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            leftChips()
-                            rightButtons()
+                        if (!landNow) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                            ) {
+                                audioChip()
+                                loopButton()
+                                queueButton()
+                            }
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(
@@ -1205,7 +1219,30 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                 modifier = Modifier.width(44.dp),
                             )
                         }
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { transport() }
+                        Box(Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.align(Alignment.CenterStart),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                lockButton()
+                                speedChip()
+                                if (landNow) audioChip()
+                            }
+                            Box(Modifier.align(Alignment.Center)) { transport() }
+                            Row(
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                if (landNow) {
+                                    loopButton()
+                                    queueButton()
+                                }
+                                rotateButton()
+                                fitButton()
+                            }
+                        }
                     }
                 }
             }
