@@ -182,12 +182,14 @@ private fun SkipButton(
     enabled: Boolean,
     box: Dp = 44.dp,
     iconSize: Dp = 26.dp,
+    background: Color = Color.Transparent,
     onClick: () -> Unit,
 ) {
     Box(
         Modifier
             .size(box)
             .clip(CircleShape)
+            .background(background)
             .then(if (enabled) Modifier.bounceClick(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
@@ -1112,15 +1114,16 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(36.dp),
                 ) {
-                    SkipButton(GIcons.SkipPrevious, "Previous video", hasPrev, box = 52.dp, iconSize = 34.dp) {
+                    SkipButton(GIcons.SkipPrevious, "Previous video", hasPrev, box = 56.dp, iconSize = 28.dp, background = PlayerChrome) {
                         player.seekToPreviousMediaItem()
                         player.play()
                         interaction++
                     }
                     Box(
                         Modifier
-                            .size(68.dp)
+                            .size(72.dp)
                             .clip(CircleShape)
+                            .background(PlayerChrome)
                             .bounceClick(onClick = { togglePlay(); interaction++ }),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -1129,11 +1132,11 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                 imageVector = if (playing) GIcons.Pause else GIcons.Play,
                                 contentDescription = if (playing) "Pause" else "Play",
                                 tint = Color.White,
-                                modifier = Modifier.size(48.dp),
+                                modifier = Modifier.size(36.dp),
                             )
                         }
                     }
-                    SkipButton(GIcons.SkipNext, "Next video", hasNext, box = 52.dp, iconSize = 34.dp) {
+                    SkipButton(GIcons.SkipNext, "Next video", hasNext, box = 56.dp, iconSize = 28.dp, background = PlayerChrome) {
                         player.seekToNextMediaItem()
                         player.play()
                         interaction++
@@ -1242,31 +1245,6 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                             .padding(bottom = 6.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.align(Alignment.CenterStart),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                lockButton()
-                                speedChip()
-                                audioChip()
-                            }
-                            Row(
-                                modifier = Modifier.align(Alignment.CenterEnd),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                loopButton()
-                                queueButton()
-                                rotateButton()
-                                fitButton()
-                            }
-                        }
                         Text(
                             text = formatDuration(if (scrubbing) (scrubValue * duration).toLong() else position) +
                                 " / " + formatDuration(duration),
@@ -1294,8 +1272,33 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                 scrubbing = false
                                 interaction++
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                         )
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.align(Alignment.CenterStart),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                lockButton()
+                                speedChip()
+                                audioChip()
+                            }
+                            Row(
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                loopButton()
+                                queueButton()
+                                rotateButton()
+                                fitButton()
+                            }
+                        }
                     }
                 }
             }
