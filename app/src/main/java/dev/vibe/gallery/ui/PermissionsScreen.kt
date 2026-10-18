@@ -44,10 +44,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.vibe.gallery.ui.theme.GIcons
 
-/** What the app has been allowed to do. One permission: access to all files. */
-data class PermState(val allFiles: Boolean) {
-    val media: Boolean get() = allFiles
-    val all: Boolean get() = allFiles
+/** What the app has been allowed to do. All three are required. */
+data class PermState(
+    val images: Boolean,
+    val videos: Boolean,
+    val allFiles: Boolean,
+) {
+    val media: Boolean get() = images && videos
+    val all: Boolean get() = media && allFiles
 }
 
 /**
@@ -58,6 +62,8 @@ data class PermState(val allFiles: Boolean) {
 fun PermissionsScreen(
     state: PermState,
     onGrantAll: () -> Unit,
+    onRequestMedia: () -> Unit,
+    onRequestAllFiles: () -> Unit,
     onBack: (() -> Unit)? = null,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -80,7 +86,7 @@ fun PermissionsScreen(
                 verticalArrangement = Arrangement.spacedBy(9.dp),
             ) {
                 Text(
-                    "Permission",
+                    "Permissions",
                     fontSize = 26.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = cs.onBackground,
@@ -88,40 +94,52 @@ fun PermissionsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    "Gallery needs one permission to show and manage your media. Tap it to learn why.",
+                    "Gallery needs these to show and manage your media. Tap one to learn why.",
                     fontSize = 13.sp,
                     color = cs.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
                 )
                 PermCard(
+                    icon = GIcons.Image,
+                    title = "Read media images",
+                    optional = false,
+                    granted = state.images,
+                    why = "Needed to show the photos stored on your phone. Nothing is uploaded anywhere.",
+                    onAllow = onRequestMedia,
+                )
+                PermCard(
+                    icon = GIcons.VideoAlbum,
+                    title = "Read media videos",
+                    optional = false,
+                    granted = state.videos,
+                    why = "Needed to show and play your videos.",
+                    onAllow = onRequestMedia,
+                )
+                PermCard(
                     icon = GIcons.Move,
                     title = "Access to all files",
                     optional = false,
                     granted = state.allFiles,
-                    why = "Lets Gallery read your photos and videos (including on the SD card), move and rename files and albums, read a photo's location, and delete without extra prompts. Nothing leaves your phone.",
-                    onAllow = onGrantAll,
+                    why = "Lets Gallery move and rename files and albums (also on the SD card), read a photo's location, and delete without extra prompts.",
+                    onAllow = onRequestAllFiles,
                 )
                 Box(Modifier.size(8.dp))
             }
             Text(
-                if (state.allFiles) (if (onBack == null) "Continue" else "All set") else "Grant access",
-                fontSize = 14.sp,
+                if (state.all) "All set" else "Allow access",
+                fontSize = 13.5.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = cs.onPrimary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 14.dp)
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(26.dp))
+                    .clip(RoundedCornerShape(22.dp))
                     .background(cs.primary)
-                    .bounceClick(
-                        onClick = {
-                            if (!state.allFiles) onGrantAll() else onBack?.invoke()
-                        },
-                    )
-                    .padding(vertical = 13.dp),
+                    .bounceClick(onClick = { if (!state.all) onGrantAll() else onBack?.invoke() })
+                    .padding(vertical = 11.dp),
             )
         }
     }
@@ -145,14 +163,14 @@ private fun PermCard(
             .clip(RoundedCornerShape(20.dp))
             .background(cs.surface.copy(alpha = 0.9f))
             .bounceClick(onClick = { open = !open })
-            .padding(horizontal = 14.dp, vertical = 11.dp)
+            .padding(horizontal = 14.dp, vertical = 9.dp)
             .animateContentSize(tween(220)),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Box(
-                Modifier.size(40.dp).clip(CircleShape).background(cs.primary.copy(alpha = 0.22f)),
+                Modifier.size(36.dp).clip(CircleShape).background(cs.primary.copy(alpha = 0.22f)),
                 contentAlignment = Alignment.Center,
-            ) { Icon(icon, null, tint = cs.primary, modifier = Modifier.size(19.dp)) }
+            ) { Icon(icon, null, tint = cs.primary, modifier = Modifier.size(18.dp)) }
             Column(Modifier.weight(1f)) {
                 Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = cs.onBackground)
                 Text(
@@ -180,7 +198,7 @@ private fun PermCard(
                             .clip(RoundedCornerShape(18.dp))
                             .background(cs.primary)
                             .bounceClick(onClick = onAllow)
-                            .padding(horizontal = 22.dp, vertical = 9.dp),
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
             }
