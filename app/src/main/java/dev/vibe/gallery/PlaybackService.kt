@@ -113,7 +113,7 @@ class PlaybackService : Service() {
             .setSmallIcon(if (playing) R.drawable.ic_notif_play else R.drawable.ic_notif_pause)
             .setContentTitle(title)
             .setContentText(if (playing) "Playing" else "Paused")
-            .setSubText("Gallery")
+            .setSubText("Haze")
             .setLargeIcon(thumbnailFor(item?.localConfiguration?.uri))
             .setContentIntent(open)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT)

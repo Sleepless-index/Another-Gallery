@@ -532,7 +532,7 @@ fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit, onOpenPermissions: 
                         .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Gallery", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground, modifier = Modifier.weight(1f))
+                    Text("Haze", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground, modifier = Modifier.weight(1f))
                     Text("v0.1.0", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant)
                 }
             }
