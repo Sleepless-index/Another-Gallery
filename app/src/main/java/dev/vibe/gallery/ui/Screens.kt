@@ -130,7 +130,7 @@ fun PhotosScreen(vm: GalleryViewModel, onOpen: (List<MediaItem>, Int) -> Unit, o
                         title = "Photos",
                         subtitle = "%,d items".format(items.size),
                         trailing = {
-                            GIconButton(GIcons.CheckCircle, "Select items", onClick = { vm.startSelect() })
+                            GIconButton(GIcons.CheckSquare, "Select items", onClick = { vm.startSelect() }, flat = true)
                             Box {
                                 GIconButton(GIcons.More, "More options", onClick = { menu = true }, flat = true)
                                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -236,7 +236,7 @@ fun CollectionScreen(
                         },
                         trailing = {
                             trailingExtra()
-                            GIconButton(GIcons.CheckCircle, "Select items", onClick = { vm.startSelect() })
+                            GIconButton(GIcons.CheckSquare, "Select items", onClick = { vm.startSelect() }, flat = true)
                         },
                     )
                 }

@@ -120,6 +120,9 @@ object GIcons {
     val CheckCircle: ImageVector by lazy {
         IconBuilder("CheckCircle").s(circle(12f, 12f, 8.5f)).s("M 8.5 12.3 l 2.4 2.4 l 4.6 -5").build()
     }
+    val CheckSquare: ImageVector by lazy {
+        IconBuilder("CheckSquare").s(rrect(4f, 4f, 16f, 16f, 4.5f)).s("M 8.5 12.3 l 2.4 2.4 l 4.6 -5").build()
+    }
     val Check: ImageVector by lazy { IconBuilder("Check").s("M 5 12.5 l 4.5 4.5 L 19 7.5").build() }
     val Close: ImageVector by lazy { IconBuilder("Close").s("M 6 6 l 12 12 M 18 6 L 6 18").build() }
     val Plus: ImageVector by lazy { IconBuilder("Plus").s("M 12 5 v 14 M 5 12 h 14").build() }
