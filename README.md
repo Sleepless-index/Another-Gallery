@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/icon.png" width="128" alt="Haze icon"></p>
+
 <h1 align="center">Haze</h1>
 
 <p align="center">
