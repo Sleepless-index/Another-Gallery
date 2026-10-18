@@ -61,14 +61,21 @@ fun GalleryRoot(
     vm: GalleryViewModel,
     perms: PermState,
     onGrantAll: () -> Unit,
+    onRequestMedia: () -> Unit,
+    onRequestAllFiles: () -> Unit,
     onAuthenticate: (onSuccess: () -> Unit) -> Unit,
     onSecure: (Boolean) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
 
-    // Without access to all files the app can't do its job, so this is the only screen until it's granted.
-    if (!perms.allFiles) {
-        PermissionsScreen(state = perms, onGrantAll = onGrantAll)
+    // The app can't do its job without these, so this is the only screen until they're all granted.
+    if (!perms.all) {
+        PermissionsScreen(
+            state = perms,
+            onGrantAll = onGrantAll,
+            onRequestMedia = onRequestMedia,
+            onRequestAllFiles = onRequestAllFiles,
+        )
         return
     }
 
@@ -130,6 +137,8 @@ fun GalleryRoot(
                 PermissionsScreen(
                     state = perms,
                     onGrantAll = onGrantAll,
+                    onRequestMedia = onRequestMedia,
+                    onRequestAllFiles = onRequestAllFiles,
                     onBack = { nav.popBackStack() },
                 )
             }
