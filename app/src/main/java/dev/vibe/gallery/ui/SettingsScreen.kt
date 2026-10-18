@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -414,6 +415,7 @@ fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit, onOpenPermissions: 
                 ) { MasonryPreview() }
             }
 
+            Spacer(Modifier.height(12.dp))
             CardGroup {
                 Row(
                     modifier = Modifier
@@ -518,28 +520,6 @@ fun SettingsScreen(vm: GalleryViewModel, onBack: () -> Unit, onOpenPermissions: 
                 ) {
                     Text("Permissions", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground, modifier = Modifier.weight(1f))
                     Text("Manage", fontSize = 13.sp, color = cs.onSurfaceVariant)
-                }
-            }
-
-            if (Build.VERSION.SDK_INT >= 30) {
-                SectionLabel("Trash")
-                Text(
-                    "Deleted items stay in the trash for 30 days, then are removed for good. Needs All files access.",
-                    fontSize = 12.sp,
-                    color = cs.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp),
-                )
-                CardGroup {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .bounceClick(onClick = { vm.emptyTrash() })
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("Empty trash now", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground, modifier = Modifier.weight(1f))
-                    }
                 }
             }
 
