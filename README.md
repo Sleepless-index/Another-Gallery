@@ -31,7 +31,7 @@ Release builds use the debug key unless `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `K
 
 ## Stack
 
-Kotlin, Jetpack Compose, Room, DataStore, Coil, Media3. Package `dev.vibe.gallery`, min SDK 29.
+Kotlin, Jetpack Compose, Room, DataStore, Coil, Media3. Package `sleepless_index.haze`, min SDK 29.
 
 ## Notes
 
