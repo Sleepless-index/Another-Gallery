@@ -98,7 +98,7 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     val player = remember {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(ExoMediaItem.fromUri(item.uri))
-            repeatMode = Player.REPEAT_OFF
+            repeatMode = Player.REPEAT_MODE_OFF
             prepare()
         }
     }
