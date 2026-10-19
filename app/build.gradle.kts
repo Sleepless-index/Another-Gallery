@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "dev.vibe.gallery"
+    namespace = "sleepless_index.haze"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.vibe.gallery"
+        applicationId = "sleepless_index.haze"
         minSdk = 29
         targetSdk = 35
         versionCode = 1
@@ -100,4 +100,7 @@ dependencies {
     implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("androidx.print:print:1.0.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
+
+    // Installs the baseline profile on sideloaded builds (Play does this itself).
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 }

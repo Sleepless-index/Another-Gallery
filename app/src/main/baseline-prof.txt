@@ -1,0 +1,22 @@
+# Baseline profile (hand-written rules). Tells ART which code to precompile at install so the
+# first launch and the first scroll don't run through the interpreter.
+# H = hot, S = startup, P = post-startup.
+
+# App code
+HSPLsleepless_index/haze/**->**(**)**
+Lsleepless_index/haze/**;
+
+# Compose runtime, UI and foundation (grid, scrolling, animation)
+HSPLandroidx/compose/runtime/**->**(**)**
+HSPLandroidx/compose/ui/**->**(**)**
+HSPLandroidx/compose/foundation/**->**(**)**
+HSPLandroidx/compose/animation/**->**(**)**
+HSPLandroidx/compose/material3/**->**(**)**
+HSPLandroidx/compose/material/ripple/**->**(**)**
+
+# Image loading and activity/lifecycle plumbing
+HSPLcoil/**->**(**)**
+HSPLandroidx/activity/**->**(**)**
+HSPLandroidx/lifecycle/**->**(**)**
+HSPLandroidx/navigation/**->**(**)**
+HSPLandroidx/datastore/**->**(**)**
