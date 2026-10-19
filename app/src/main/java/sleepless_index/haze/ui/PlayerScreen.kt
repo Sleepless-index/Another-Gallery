@@ -766,16 +766,14 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                 accum = 0f
                                 volAccum = audio.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat()
                             },
-                            onDragEnd = {
-                                if (mode == 1) player.seekTo(target)
-                                mode = 0
-                            },
+                            onDragEnd = { mode = 0 },
                             onDragCancel = { mode = 0 },
                             onDrag = { change, drag ->
                                 change.consume()
                                 if (mode == 0) {
+                                    // Horizontal swipes do nothing (seeking is the bar's job).
                                     mode = if (abs(drag.x) > abs(drag.y)) {
-                                        1
+                                        4
                                     } else if (startX < size.width / 2f) {
                                         2
                                     } else {
@@ -783,16 +781,6 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                     }
                                 }
                                 when (mode) {
-                                    1 -> {
-                                        accum += drag.x
-                                        val dur = if (player.duration > 0) player.duration else Long.MAX_VALUE
-                                        target = (startPos + accum / size.width * 90_000f).toLong().coerceIn(0L, dur)
-                                        val delta = (target - startPos) / 1000
-                                        hud = Hud(
-                                            GIcons.Play,
-                                            (if (delta >= 0) "+" else "") + delta + "s  ·  " + formatDuration(target),
-                                        )
-                                    }
                                     2 -> {
                                         applyBrightness(brightness - drag.y / size.height * 1.2f)
                                         hud = Hud(GIcons.Brightness, "${(brightness * 100).roundToInt()}%", brightness, -1)

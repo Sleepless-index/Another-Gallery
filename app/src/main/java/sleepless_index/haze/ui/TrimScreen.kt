@@ -78,7 +78,7 @@ import kotlin.coroutines.resume
 import kotlin.math.roundToInt
 
 private const val MIN_CLIP_MS = 500L
-private val HandleW = 14.dp
+private val HandleW = 22.dp
 private val StripH = 56.dp
 
 /** Video trimmer: pick a start and end, preview the range, save the cut as a new video. */
@@ -130,12 +130,19 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
         onDispose { player.removeListener(l) }
     }
 
-    // Keeps the playhead in sync and stops at the end of the selected range.
+    // Keeps the playhead in sync, picks up the real duration, and stops at the end of the range.
     LaunchedEffect(player) {
         while (true) {
             val pos = player.currentPosition
             playhead = pos
-            if (player.isPlaying && pos >= endMs) {
+            playing = player.isPlaying
+            val d = player.duration
+            if (d > 0 && d != durationMs) {
+                val wasFull = endMs >= durationMs
+                durationMs = d
+                if (wasFull || endMs > d) endMs = d
+            }
+            if (player.isPlaying && endMs > startMs && pos >= endMs) {
                 player.pause()
                 player.seekTo(startMs)
                 playhead = startMs
@@ -154,7 +161,8 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
         if (player.isPlaying) {
             player.pause()
         } else {
-            if (player.currentPosition !in startMs until endMs) player.seekTo(startMs)
+            if (player.currentPosition < startMs || player.currentPosition >= endMs - 100L) player.seekTo(startMs)
+            player.playWhenReady = true
             player.play()
         }
     }
@@ -288,6 +296,7 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
 
         Spacer(Modifier.height(8.dp))
 
+        Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
         TrimStrip(
             item = item,
             durationMs = durationMs,
@@ -299,6 +308,7 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
             onEnd = { endMs = it; seekPreview((it - 300L).coerceAtLeast(startMs)) },
             onScrub = { seekPreview(it.coerceIn(startMs, endMs)) },
         )
+        }
 
         Spacer(Modifier.height(16.dp))
 
@@ -400,99 +410,105 @@ private fun TrimStrip(
 ) {
     val ctx = LocalContext.current
     val density = androidx.compose.ui.platform.LocalDensity.current
-    var widthPx by remember { mutableFloatStateOf(1f) }
+    var outerPx by remember { mutableFloatStateOf(1f) }
     val handlePx = with(density) { HandleW.toPx() }
+    val trackPx = (outerPx - 2f * handlePx).coerceAtLeast(1f)
 
     val dur by rememberUpdatedState(durationMs)
     val start by rememberUpdatedState(startMs)
     val end by rememberUpdatedState(endMs)
-    val w by rememberUpdatedState(widthPx)
+    val w by rememberUpdatedState(trackPx)
 
-    fun xOf(ms: Long): Float = (ms.toFloat() / durationMs.coerceAtLeast(1L)) * widthPx
+    fun xOf(ms: Long): Float = (ms.toFloat() / durationMs.coerceAtLeast(1L)) * trackPx
 
+    // The outer box is wide enough to contain both handles, so they are always touchable.
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = HandleW)
             .height(StripH)
-            .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) },
+            .onSizeChanged { outerPx = it.width.toFloat().coerceAtLeast(1f) },
     ) {
-        // Frames
-        Row(Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp))) {
-            val count = 8
-            for (i in 0 until count) {
-                val at = (dur * (i + 0.5f) / count).toLong()
-                val req = remember(item.uri, at) {
-                    ImageRequest.Builder(ctx)
-                        .data(item.uri)
-                        .videoFrameMillis(at)
-                        .size(160)
-                        .build()
+        // Track: frames, dimming, selection frame and playhead
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = HandleW),
+        ) {
+            Row(Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp))) {
+                val count = 8
+                for (i in 0 until count) {
+                    val at = (dur * (i + 0.5f) / count).toLong()
+                    val req = remember(item.uri, at) {
+                        ImageRequest.Builder(ctx)
+                            .data(item.uri)
+                            .videoFrameMillis(at)
+                            .size(160)
+                            .build()
+                    }
+                    AsyncImage(
+                        model = req,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.weight(1f).fillMaxHeight().background(Color(0xFF1A1A1A)),
+                    )
                 }
-                AsyncImage(
-                    model = req,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.weight(1f).fillMaxHeight().background(Color(0xFF1A1A1A)),
+            }
+
+            // Tap or drag on the frames to move the preview
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures { o -> onScrub(((o.x / w) * dur).toLong()) }
+                    }
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures { change, _ ->
+                            change.consume()
+                            onScrub(((change.position.x / w) * dur).toLong())
+                        }
+                    }
+            )
+
+            // Dim everything outside the selection
+            Box(
+                Modifier
+                    .width(with(density) { xOf(startMs).toDp() })
+                    .fillMaxHeight()
+                    .background(Color.Black.copy(alpha = 0.6f))
+            )
+            Box(
+                Modifier
+                    .offset { IntOffset(xOf(endMs).roundToInt(), 0) }
+                    .width(with(density) { (trackPx - xOf(endMs)).coerceAtLeast(0f).toDp() })
+                    .fillMaxHeight()
+                    .background(Color.Black.copy(alpha = 0.6f))
+            )
+
+            // Selection frame
+            Box(
+                Modifier
+                    .offset { IntOffset(xOf(startMs).roundToInt(), 0) }
+                    .width(with(density) { (xOf(endMs) - xOf(startMs)).coerceAtLeast(0f).toDp() })
+                    .fillMaxHeight()
+                    .border(2.dp, accent, RoundedCornerShape(4.dp))
+            )
+
+            // Playhead
+            if (playheadMs in startMs..endMs) {
+                Box(
+                    Modifier
+                        .offset { IntOffset(xOf(playheadMs).roundToInt() - 1.dp.roundToPx(), 0) }
+                        .width(2.dp)
+                        .fillMaxHeight()
+                        .background(Color.White)
                 )
             }
         }
 
-        // Tap or drag on the strip to move the preview
-        Box(
-            Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures { o -> onScrub(((o.x / w) * dur).toLong()) }
-                }
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures { change, _ ->
-                        change.consume()
-                        onScrub(((change.position.x / w) * dur).toLong())
-                    }
-                }
-        )
-
-        // Dim everything outside the selection
-        Box(
-            Modifier
-                .offset { IntOffset(0, 0) }
-                .width(with(density) { xOf(startMs).toDp() })
-                .fillMaxHeight()
-                .background(Color.Black.copy(alpha = 0.6f))
-        )
-        Box(
-            Modifier
-                .offset { IntOffset(xOf(endMs).roundToInt(), 0) }
-                .width(with(density) { (widthPx - xOf(endMs)).coerceAtLeast(0f).toDp() })
-                .fillMaxHeight()
-                .background(Color.Black.copy(alpha = 0.6f))
-        )
-
-        // Selection frame
-        Box(
-            Modifier
-                .offset { IntOffset(xOf(startMs).roundToInt(), 0) }
-                .width(with(density) { (xOf(endMs) - xOf(startMs)).coerceAtLeast(0f).toDp() })
-                .fillMaxHeight()
-                .border(2.dp, accent, RoundedCornerShape(4.dp))
-        )
-
-        // Playhead
-        if (playheadMs in startMs..endMs) {
-            Box(
-                Modifier
-                    .offset { IntOffset(xOf(playheadMs).roundToInt() - 1.dp.roundToPx(), 0) }
-                    .width(2.dp)
-                    .fillMaxHeight()
-                    .background(Color.White)
-            )
-        }
-
-        // Handles (sit just outside the selection so they never cover the frames inside it)
+        // Handles: the start handle sits left of the selection, the end handle right of it.
         Handle(
             modifier = Modifier
-                .offset { IntOffset(xOf(startMs).roundToInt() - handlePx.roundToInt(), 0) }
+                .offset { IntOffset(xOf(startMs).roundToInt(), 0) }
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures { change, dx ->
                         change.consume()
@@ -504,7 +520,7 @@ private fun TrimStrip(
         )
         Handle(
             modifier = Modifier
-                .offset { IntOffset(xOf(endMs).roundToInt(), 0) }
+                .offset { IntOffset((handlePx + xOf(endMs)).roundToInt(), 0) }
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures { change, dx ->
                         change.consume()
