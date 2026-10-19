@@ -301,7 +301,7 @@ private fun exoItemFor(v: MediaItem, subs: List<ExoMediaItem.SubtitleConfigurati
         .build()
 
 @Composable
-fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenVideo: (Long) -> Unit) {
+fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenVideo: (Long) -> Unit, onTrim: (Long) -> Unit = {}) {
     val startItem = remember(itemId) { vm.findItem(itemId) }
     if (startItem == null) {
         LaunchedEffect(Unit) { onBack() }
@@ -1060,6 +1060,14 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                     onClick = {
                                         moreMenu = false
                                         mirror = !mirror
+                                    },
+                                )
+                                CompactMenuItem(
+                                    text = { PlayerMenuRow(GIcons.Scissors, "Trim") },
+                                    onClick = {
+                                        moreMenu = false
+                                        player.pause()
+                                        onTrim(item.id)
                                     },
                                 )
                                 CompactMenuItem(

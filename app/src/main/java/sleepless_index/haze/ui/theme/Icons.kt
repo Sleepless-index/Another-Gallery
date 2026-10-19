@@ -125,6 +125,11 @@ object GIcons {
     }
     val Check: ImageVector by lazy { IconBuilder("Check").s("M 5 12.5 l 4.5 4.5 L 19 7.5").build() }
     val Close: ImageVector by lazy { IconBuilder("Close").s("M 6 6 l 12 12 M 18 6 L 6 18").build() }
+    val Scissors: ImageVector by lazy {
+        IconBuilder("Scissors")
+            .s("M 3 6 a 3 3 0 1 0 6 0 a 3 3 0 1 0 -6 0 M 3 18 a 3 3 0 1 0 6 0 a 3 3 0 1 0 -6 0 M 8.6 7.6 L 20 19 M 8.6 16.4 L 20 5")
+            .build()
+    }
     val Plus: ImageVector by lazy { IconBuilder("Plus").s("M 12 5 v 14 M 5 12 h 14").build() }
     val Minus: ImageVector by lazy { IconBuilder("Minus").s("M 5 12 h 14").build() }
     val Play: ImageVector by lazy { IconBuilder("Play").f("M 7 4 v 16 l 13 -8 z").build() }
