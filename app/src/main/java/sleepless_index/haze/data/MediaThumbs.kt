@@ -57,9 +57,8 @@ fun thumbRequest(context: Context, uri: Uri, px: Int, video: Boolean = false): I
         .data(uri)
         .size(px)
         .apply {
-            // Android's own thumbnail cache is much cheaper than decoding the original, for
-            // video frames and for photos at grid sizes. The fetcher falls back to a normal
-            // decode if the system thumbnail would come out softer than the requested size.
-            if (video || px <= 800) setParameter("thumb", true)
+            // The system thumbnail cache is only a win for video frames. Photos are decoded
+            // (down-sampled) directly from the original so they stay sharp.
+            if (video) setParameter("thumb", true)
         }
         .build()
