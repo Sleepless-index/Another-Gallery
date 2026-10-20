@@ -245,7 +245,7 @@ private fun CropOverlay(
 }
 
 @Composable
-private fun Chip(label: String, active: Boolean, onClick: () -> Unit) {
+internal fun Chip(label: String, active: Boolean, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val fg by animateColorAsState(if (active) cs.primary else cs.onBackground, tween(180), label = "chipFg")
     val line by animateColorAsState(if (active) cs.primary else cs.outline, tween(180), label = "chipLine")
@@ -263,7 +263,7 @@ private fun Chip(label: String, active: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun TabPill(label: String, active: Boolean, onClick: () -> Unit) {
+internal fun TabPill(label: String, active: Boolean, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val bg by animateColorAsState(if (active) cs.surfaceVariant else Color.Transparent, tween(200), label = "tabBg")
     val fg by animateColorAsState(if (active) cs.primary else cs.onSurfaceVariant, tween(200), label = "tabFg")
@@ -281,7 +281,7 @@ private fun TabPill(label: String, active: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun AdjustSlider(
+internal fun AdjustSlider(
     label: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,

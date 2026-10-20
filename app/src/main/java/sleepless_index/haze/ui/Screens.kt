@@ -236,6 +236,20 @@ fun CollectionScreen(
                         },
                         trailing = {
                             trailingExtra()
+                            if (trash && items.isNotEmpty()) {
+                                androidx.compose.material3.Text(
+                                    text = "Empty",
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant)
+                                        .bounceClick(onClick = { vm.emptyTrash() })
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                )
+                                Box(Modifier.size(8.dp))
+                            }
                             GIconButton(GIcons.CheckSquare, "Select items", onClick = { vm.startSelect() }, flat = true)
                         },
                     )

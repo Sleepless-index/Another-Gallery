@@ -3,6 +3,33 @@
 package sleepless_index.haze.ui
 
 import android.view.ViewGroup
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Paint
+import android.view.TextureView
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
+import androidx.media3.ui.AspectRatioFrameLayout
+import sleepless_index.haze.R
+import sleepless_index.haze.editor.AdjustSlider
+import sleepless_index.haze.editor.Chip
+import sleepless_index.haze.editor.TabPill
+import androidx.compose.ui.graphics.ColorMatrix as ComposeColorMatrix
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -17,6 +44,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -178,6 +206,27 @@ private fun buildEffects(
     return out
 }
 
+/** 4x5 colour matrix for the live preview, approximating the export effects. */
+private fun colorArray(b: Float, c: Float, s: Float, w: Float, gray: Boolean): FloatArray {
+    val m = android.graphics.ColorMatrix()
+    m.setSaturation(if (gray) 0f else (1f + s / 100f).coerceAtLeast(0f))
+    val sc = 1f + c
+    val t = 128f * (1f - sc) + b * 255f
+    m.postConcat(android.graphics.ColorMatrix(floatArrayOf(
+        sc, 0f, 0f, 0f, t,
+        0f, sc, 0f, 0f, t,
+        0f, 0f, sc, 0f, t,
+        0f, 0f, 0f, 1f, 0f,
+    )))
+    m.postConcat(android.graphics.ColorMatrix(floatArrayOf(
+        1f + 0.25f * w, 0f, 0f, 0f, 0f,
+        0f, 1f, 0f, 0f, 0f,
+        0f, 0f, 1f - 0.25f * w, 0f, 0f,
+        0f, 0f, 0f, 1f, 0f,
+    )))
+    return m.array
+}
+
 /** Video editor: trim, crop, rotate, flip, adjust and filters. Saves the result as a new video. */
 @Composable
 fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
@@ -196,6 +245,7 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(ExoMediaItem.fromUri(item.uri))
             repeatMode = Player.REPEAT_MODE_OFF
+            playWhenReady = false
             prepare()
         }
     }
@@ -228,7 +278,11 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
             brightness, contrast, saturation, warmth, gray,
         )
     }
-    LaunchedEffect(effects) { player.setVideoEffects(effects) }
+    val previewMatrix = remember(brightness, contrast, saturation, warmth, gray) {
+        if (brightness == 0f && contrast == 0f && saturation == 0f && warmth == 0f && !gray) null
+        else colorArray(brightness, contrast, saturation, warmth, gray)
+    }
+    val hasEdits = startMs > 0L || endMs < durationMs || mute || effects.isNotEmpty()
 
     // Keeps the playhead in sync, picks up the real duration, and stops at the end of the range.
     LaunchedEffect(player) {
@@ -262,7 +316,6 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
             player.pause()
         } else {
             if (player.currentPosition < startMs || player.currentPosition >= endMs - 100L) player.seekTo(startMs)
-            player.playWhenReady = true
             player.play()
         }
     }
@@ -358,157 +411,218 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
-        // Top bar
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             GIconButton(GIcons.Close, "Close editor", onClick = { if (!exporting) onClose() })
             Text(
-                "Edit video", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = Color.White,
+                "Edit", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground,
                 modifier = Modifier.weight(1f).padding(start = 14.dp),
             )
+            val saveBg by animateColorAsState(if (hasEdits) cs.primary else cs.surfaceVariant, tween(220), label = "saveBg")
+            val saveFg by animateColorAsState(if (hasEdits) cs.onPrimary else cs.onSurfaceVariant, tween(220), label = "saveFg")
             Box(
                 modifier = Modifier
                     .height(40.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(cs.primary)
-                    .bounceClick(onClick = { save() })
-                    .padding(horizontal = 20.dp),
+                    .background(saveBg)
+                    .bounceClick(enabled = hasEdits && !exporting, onClick = { save() })
+                    .padding(horizontal = 18.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Save copy", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = cs.onPrimary)
+                Text("Save copy", color = saveFg, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
             }
         }
 
-        // Preview (shows the effects live)
-        Box(Modifier.weight(1f).fillMaxWidth().background(Color.Black)) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    val exo = player
-                    PlayerView(ctx).apply {
-                        useController = false
-                        this.player = exo
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
-                        )
+        // Preview: rotate, flip, crop and colour are applied to the view so edits show live.
+        Box(
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                val odd = quarter % 2 != 0
+                val srcW = item.width.coerceAtLeast(1)
+                val srcH = item.height.coerceAtLeast(1)
+                val frame = if (odd) srcH.toFloat() / srcW else srcW.toFloat() / srcH
+                val ratio = Aspects[aspectIdx].ratio ?: frame
+                val boxAspect = maxWidth.value / maxHeight.value
+                val bw = if (boxAspect > ratio) maxHeight * ratio else maxWidth
+                val bh = if (boxAspect > ratio) maxHeight else maxWidth / ratio
+
+                Box(
+                    modifier = Modifier
+                        .requiredSize(bw, bh)
+                        .clip(RectangleShape)
+                        .graphicsLayer { scaleX = if (flip) -1f else 1f },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AndroidView(
+                        modifier = Modifier
+                            .requiredSize(if (odd) bh else bw, if (odd) bw else bh)
+                            .graphicsLayer { rotationZ = -(quarter % 4) * 90f },
+                        factory = { ctx ->
+                            val exo = player
+                            val v = android.view.LayoutInflater.from(ctx).inflate(R.layout.player_texture, null, false) as PlayerView
+                            v.apply {
+                                useController = false
+                                this.player = exo
+                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                            }
+                        },
+                        update = { pv ->
+                            val tv = pv.videoSurfaceView as? TextureView
+                            val m = previewMatrix
+                            tv?.setLayerPaint(
+                                if (m == null) null else Paint().apply { colorFilter = ColorMatrixColorFilter(android.graphics.ColorMatrix(m)) }
+                            )
+                        },
+                    )
+                }
+                Box(
+                    Modifier
+                        .requiredSize(bw, bh)
+                        .pointerInput(Unit) { detectTapGestures { togglePlay() } },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (!playing) {
+                        Box(
+                            Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(28.dp))
+                                .background(Color.Black.copy(alpha = 0.45f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            androidx.compose.material3.Icon(GIcons.Play, "Play", tint = Color.White, modifier = Modifier.size(26.dp))
+                        }
                     }
-                },
-            )
-            // Tap the preview to play or pause
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) { detectTapGestures { togglePlay() } }
-            )
+                }
+            }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Tool.values().forEach { t -> TabPill(t.label, tool == t) { tool = t } }
+        }
 
-        // Tool panel
-        Box(Modifier.fillMaxWidth().height(150.dp)) {
-            when (tool) {
-                Tool.Trim -> Column(Modifier.fillMaxSize()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(formatTime(startMs), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text("${formatTime(endMs - startMs)} selected", fontSize = 13.sp, color = cs.onSurfaceVariant)
-                        Text(formatTime(endMs), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        AnimatedContent(
+            targetState = tool,
+            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) },
+            label = "videoEditorTab",
+            modifier = Modifier.fillMaxWidth().heightIn(min = 190.dp),
+        ) { current ->
+            when (current) {
+                Tool.Trim -> Column(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(formatTime(startMs), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
+                        Text("${formatTime(endMs - startMs)} selected", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurfaceVariant)
+                        Text(formatTime(endMs), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
-                        TrimStrip(
-                            item = item,
-                            durationMs = durationMs,
-                            startMs = startMs,
-                            endMs = endMs,
-                            playheadMs = playhead,
-                            accent = cs.primary,
-                            onStart = { startMs = it; seekPreview(it) },
-                            onEnd = { endMs = it; seekPreview((it - 300L).coerceAtLeast(startMs)) },
-                            onScrub = { seekPreview(it.coerceIn(startMs, endMs)) },
-                        )
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
+                    TrimStrip(
+                        item = item,
+                        durationMs = durationMs,
+                        startMs = startMs,
+                        endMs = endMs,
+                        playheadMs = playhead,
+                        accent = cs.primary,
+                        onStart = { startMs = it; seekPreview(it) },
+                        onEnd = { endMs = it; seekPreview((it - 300L).coerceAtLeast(startMs)) },
+                        onScrub = { seekPreview(it.coerceIn(startMs, endMs)) },
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         GIconButton(
                             if (playing) GIcons.Pause else GIcons.Play,
                             if (playing) "Pause preview" else "Play preview",
                             onClick = { togglePlay() },
+                            size = 40.dp,
                         )
-                        EditChip(if (mute) "Audio off" else "Audio on", mute) { mute = !mute }
+                        Chip(if (mute) "Audio off" else "Audio on", mute) { mute = !mute }
                     }
                 }
 
-                Tool.Crop -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Aspects.forEachIndexed { i, a -> EditChip(a.label, aspectIdx == i) { aspectIdx = i } }
+                Tool.Crop -> Column(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Aspects.forEachIndexed { i, a -> Chip(a.label, aspectIdx == i) { aspectIdx = i } }
+                        }
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        EditChip("Rotate left", false) { quarter = (quarter + 1) % 4 }
-                        EditChip("Rotate right", false) { quarter = (quarter + 3) % 4 }
-                        EditChip("Flip", flip) { flip = !flip }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        GIconButton(GIcons.RotateLeft, "Rotate left", onClick = { quarter = (quarter + 1) % 4 }, size = 40.dp)
+                        Box(Modifier.size(6.dp))
+                        GIconButton(GIcons.Flip, "Flip horizontally", onClick = { flip = !flip }, size = 40.dp)
+                        Text(
+                            "Crop keeps the centre of the frame",
+                            fontSize = 12.sp, color = cs.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 14.dp),
+                        )
                     }
-                    Text(
-                        "Crop keeps the centre of the frame.",
-                        fontSize = 12.sp, color = cs.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 20.dp),
-                    )
                 }
 
-                Tool.Adjust -> Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
-                ) {
-                    AdjustRow("Brightness", brightness, -0.5f..0.5f) { brightness = it; lookIdx = -1 }
-                    AdjustRow("Contrast", contrast, -0.5f..0.5f) { contrast = it; lookIdx = -1 }
-                    AdjustRow("Saturation", saturation, -100f..100f) { saturation = it; lookIdx = -1 }
-                    AdjustRow("Warmth", warmth, -1f..1f) { warmth = it; lookIdx = -1 }
+                Tool.Adjust -> Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                    AdjustSlider("Brightness", brightness, -0.5f..0.5f, "%+.0f".format(brightness * 200)) { brightness = it; lookIdx = -1 }
+                    AdjustSlider("Contrast", contrast, -0.5f..0.5f, "%+.0f".format(contrast * 200)) { contrast = it; lookIdx = -1 }
+                    AdjustSlider("Saturation", saturation, -100f..100f, "%+.0f".format(saturation)) { saturation = it; lookIdx = -1 }
+                    AdjustSlider("Warmth", warmth, -1f..1f, "%+.0f".format(warmth * 100)) { warmth = it; lookIdx = -1 }
                 }
 
-                Tool.Filters -> Row(
-                    modifier = Modifier.fillMaxSize().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Tool.Filters -> LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Looks.forEachIndexed { i, l -> EditChip(l.name, lookIdx == i) { applyLook(i) } }
-                }
-            }
-        }
-
-        // Tool tabs
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            Tool.values().forEach { t ->
-                val selected = tool == t
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (selected) cs.primary.copy(alpha = 0.2f) else Color.Transparent)
-                        .bounceClick(onClick = { tool = t })
-                        .padding(horizontal = 18.dp, vertical = 10.dp),
-                ) {
-                    Text(
-                        t.label, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                        color = if (selected) cs.primary else cs.onSurfaceVariant,
-                    )
+                    items(Looks.size) { i ->
+                        val l = Looks[i]
+                        val selected = lookIdx == i
+                        val ring by animateColorAsState(if (selected) cs.primary else Color.Transparent, tween(180), label = "lookRing")
+                        val thumb = remember(item.uri) {
+                            ImageRequest.Builder(context)
+                                .data(item.uri)
+                                .videoFrameMillis((durationMs / 3).coerceAtLeast(0L))
+                                .size(200)
+                                .build()
+                        }
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.bounceClick(role = Role.RadioButton, onClick = { applyLook(i) }),
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(84.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .border(BorderStroke(2.dp, ring), RoundedCornerShape(14.dp))
+                                    .background(cs.surfaceVariant)
+                            ) {
+                                val arr = colorArray(l.brightness, l.contrast, l.saturation, l.warmth, l.gray)
+                                AsyncImage(
+                                    model = thumb,
+                                    contentDescription = l.name,
+                                    contentScale = ContentScale.Crop,
+                                    colorFilter = if (i == 0) null else ColorFilter.colorMatrix(ComposeColorMatrix(arr)),
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            Text(
+                                l.name, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                color = if (selected) cs.primary else cs.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -526,12 +640,12 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                 modifier = Modifier
                     .padding(32.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(Color(0xFF161616))
+                    .background(cs.surface)
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text("Saving…", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                Text("Saving…", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
                 LinearProgressIndicator(
                     progress = { progress.coerceIn(0f, 1f) },
                     modifier = Modifier.width(220.dp),
@@ -539,55 +653,9 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                     trackColor = cs.surfaceVariant,
                 )
                 Text("${(progress * 100).roundToInt()}%", fontSize = 13.sp, color = cs.onSurfaceVariant)
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(cs.surfaceVariant)
-                        .bounceClick(onClick = { transformer?.cancel() })
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
-                ) {
-                    Text("Cancel", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground)
-                }
+                Chip("Cancel", false) { transformer?.cancel() }
             }
         }
-    }
-}
-
-@Composable
-private fun EditChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .height(40.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (selected) cs.primary.copy(alpha = 0.22f) else cs.surfaceVariant)
-            .bounceClick(onClick = onClick)
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-            color = if (selected) cs.primary else cs.onBackground,
-        )
-    }
-}
-
-@Composable
-private fun AdjustRow(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 13.sp, color = cs.onSurfaceVariant, modifier = Modifier.width(84.dp))
-        Slider(
-            value = value,
-            onValueChange = onChange,
-            valueRange = range,
-            modifier = Modifier.weight(1f),
-            colors = SliderDefaults.colors(
-                thumbColor = cs.primary,
-                activeTrackColor = cs.primary,
-                inactiveTrackColor = cs.surfaceVariant,
-            ),
-        )
     }
 }
 
