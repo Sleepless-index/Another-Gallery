@@ -19,8 +19,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.biometric.BiometricManager
-import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import android.view.WindowManager
@@ -157,7 +155,6 @@ class MainActivity : FragmentActivity() {
                     onGrantAll = { grantAll() },
                     onRequestMedia = { permissionLauncher.launch(mediaPermissions()) },
                     onRequestAllFiles = { openAllFilesSettings() },
-                    onAuthenticate = { ok -> authenticate(ok) },
                     onSecure = { secure ->
                         if (secure) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
                         else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -165,29 +162,6 @@ class MainActivity : FragmentActivity() {
                 )
             }
         }
-    }
-
-    private fun authenticate(onSuccess: () -> Unit) {
-        val allowed = BiometricManager.Authenticators.BIOMETRIC_WEAK or
-            BiometricManager.Authenticators.DEVICE_CREDENTIAL
-        if (BiometricManager.from(this).canAuthenticate(allowed) != BiometricManager.BIOMETRIC_SUCCESS) {
-            Toast.makeText(this, "Set a screen lock to use the Vault", Toast.LENGTH_LONG).show()
-            return
-        }
-        val prompt = BiometricPrompt(
-            this,
-            ContextCompat.getMainExecutor(this),
-            object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    onSuccess()
-                }
-            },
-        )
-        val info = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock Vault")
-            .setAllowedAuthenticators(allowed)
-            .build()
-        prompt.authenticate(info)
     }
 
     override fun onStop() {

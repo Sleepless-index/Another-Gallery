@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -50,27 +52,21 @@ fun VaultSelectionBar(vm: GalleryViewModel, source: List<MediaItem>, modifier: M
     }
 }
 
-/** Locked state: asks for biometrics / device credential, then shows the vault grid. */
+/** Locked state: asks for the Vault's own PIN, pattern or password, then shows the vault grid. */
 @Composable
 fun VaultScreen(
     vm: GalleryViewModel,
-    onAuthenticate: (onSuccess: () -> Unit) -> Unit,
     onBack: () -> Unit,
     onOpen: (List<MediaItem>, Int) -> Unit,
 ) {
     val unlocked by vm.vaultUnlocked.collectAsStateWithLifecycle()
     val items by vm.vault.collectAsStateWithLifecycle()
+    val prefs by vm.prefs.collectAsStateWithLifecycle()
     val cs = MaterialTheme.colorScheme
-    var asked by remember { mutableStateOf(false) }
+    var changing by remember { mutableStateOf(false) }
+    val stored = prefs.vaultLock
 
-    LaunchedEffect(unlocked) {
-        if (!unlocked && !asked) {
-            asked = true
-            onAuthenticate { vm.unlockVault() }
-        }
-    }
-
-    if (unlocked) {
+    if (unlocked && !changing) {
         CollectionScreen(
             vm = vm,
             title = "Vault",
@@ -79,48 +75,35 @@ fun VaultScreen(
             onBack = onBack,
             onOpen = onOpen,
             vault = true,
+            trailingExtra = {
+                GIconButton(GIcons.Lock, "Change lock", onClick = { changing = true }, flat = true)
+            },
         )
     } else {
         Column(
-            Modifier.fillMaxSize().statusBarsPadding().padding(32.dp),
+            Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Box(
-                Modifier.size(88.dp).clip(CircleShape).background(cs.surfaceVariant),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(GIcons.Lock, null, tint = cs.primary, modifier = Modifier.size(38.dp))
+            if (stored.isEmpty() || changing) {
+                LockSetup(
+                    title = if (changing) "Change Vault lock" else "Set a Vault lock",
+                    onDone = { type, secret ->
+                        vm.setVaultLock(VaultLockStore.make(type, secret))
+                        changing = false
+                        vm.unlockVault()
+                    },
+                    onCancel = { if (changing) changing = false else onBack() },
+                )
+            } else {
+                Box(
+                    Modifier.size(72.dp).clip(CircleShape).background(cs.surfaceVariant),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(GIcons.Lock, null, tint = cs.primary, modifier = Modifier.size(32.dp))
+                }
+                LockEntry(stored = stored, onUnlock = { vm.unlockVault() }, onBack = onBack)
             }
-            Text(
-                "Vault is locked",
-                fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground,
-                modifier = Modifier.padding(top = 18.dp),
-            )
-            Text(
-                "Files here are hidden from the gallery and other apps.",
-                fontSize = 13.sp, color = cs.onSurfaceVariant, textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            Text(
-                "Unlock",
-                fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = cs.onPrimary,
-                modifier = Modifier
-                    .padding(top = 22.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(cs.primary)
-                    .bounceClick(onClick = { onAuthenticate { vm.unlockVault() } })
-                    .padding(horizontal = 36.dp, vertical = 14.dp),
-            )
-            Text(
-                "Back",
-                fontSize = 13.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant,
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .bounceClick(onClick = onBack)
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-            )
         }
     }
 }

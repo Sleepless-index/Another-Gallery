@@ -27,6 +27,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.media3.ui.AspectRatioFrameLayout
 import sleepless_index.haze.R
 import sleepless_index.haze.editor.AdjustSlider
+import sleepless_index.haze.editor.Crop as CropRect
+import sleepless_index.haze.editor.CropOverlay
+import sleepless_index.haze.editor.fitAspect
+import sleepless_index.haze.editor.Aspects as CropAspects
+import sleepless_index.haze.editor.ToolPicker
 import sleepless_index.haze.editor.Chip
 import sleepless_index.haze.editor.TabPill
 import androidx.compose.ui.graphics.ColorMatrix as ComposeColorMatrix
@@ -51,6 +56,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
@@ -143,25 +149,11 @@ private val Looks = listOf(
     Look("Fade", 0.1f, -0.25f, -25f, 0.1f, false),
 )
 
-private data class AspectOpt(val label: String, val ratio: Float?)
-
-private val Aspects = listOf(
-    AspectOpt("Original", null),
-    AspectOpt("1:1", 1f),
-    AspectOpt("4:5", 0.8f),
-    AspectOpt("3:4", 0.75f),
-    AspectOpt("9:16", 9f / 16f),
-    AspectOpt("16:9", 16f / 9f),
-    AspectOpt("21:9", 21f / 9f),
-)
-
 /** Turns the editor's choices into Media3 effects (used for the live preview and the export). */
 private fun buildEffects(
     quarter: Int,
     flip: Boolean,
-    aspect: Float?,
-    srcW: Int,
-    srcH: Int,
+    crop: CropRect,
     brightness: Float,
     contrast: Float,
     saturation: Float,
@@ -175,22 +167,7 @@ private fun buildEffects(
     if (flip) {
         out.add(ScaleAndRotateTransformation.Builder().setScale(-1f, 1f).build())
     }
-    if (aspect != null) {
-        val odd = quarter % 2 != 0
-        val fw = (if (odd) srcH else srcW).coerceAtLeast(1)
-        val fh = (if (odd) srcW else srcH).coerceAtLeast(1)
-        val frame = fw.toFloat() / fh
-        val halfW: Float
-        val halfH: Float
-        if (aspect > frame) {
-            halfW = 1f
-            halfH = (frame / aspect).coerceIn(0.05f, 1f)
-        } else {
-            halfH = 1f
-            halfW = (aspect / frame).coerceIn(0.05f, 1f)
-        }
-        if (halfW < 0.999f || halfH < 0.999f) out.add(Crop(-halfW, halfW, -halfH, halfH))
-    }
+    if (crop != CropRect.Full) out.add(Crop(crop.l * 2f - 1f, crop.r * 2f - 1f, 1f - crop.b * 2f, 1f - crop.t * 2f))
     if (brightness != 0f) out.add(Brightness(brightness.coerceIn(-1f, 1f)))
     if (contrast != 0f) out.add(Contrast(contrast.coerceIn(-1f, 1f)))
     if (saturation != 0f) out.add(HslAdjustment.Builder().adjustSaturation(saturation.coerceIn(-100f, 100f)).build())
@@ -265,6 +242,8 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     var quarter by remember { mutableIntStateOf(0) }
     var flip by remember { mutableStateOf(false) }
     var aspectIdx by remember { mutableIntStateOf(0) }
+    var crop by remember { mutableStateOf(CropRect.Full) }
+    var started by remember { mutableStateOf(false) }
     var brightness by remember { mutableFloatStateOf(0f) }
     var contrast by remember { mutableFloatStateOf(0f) }
     var saturation by remember { mutableFloatStateOf(0f) }
@@ -272,9 +251,9 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     var gray by remember { mutableStateOf(false) }
     var lookIdx by remember { mutableIntStateOf(0) }
 
-    val effects = remember(quarter, flip, aspectIdx, brightness, contrast, saturation, warmth, gray) {
+    val effects = remember(quarter, flip, crop, brightness, contrast, saturation, warmth, gray) {
         buildEffects(
-            quarter, flip, Aspects[aspectIdx].ratio, item.width, item.height,
+            quarter, flip, crop,
             brightness, contrast, saturation, warmth, gray,
         )
     }
@@ -283,6 +262,10 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
         else colorArray(brightness, contrast, saturation, warmth, gray)
     }
     val hasEdits = startMs > 0L || endMs < durationMs || mute || effects.isNotEmpty()
+    val srcWpx = item.width.coerceAtLeast(1)
+    val srcHpx = item.height.coerceAtLeast(1)
+    val fW = if (quarter % 2 != 0) srcHpx else srcWpx
+    val fH = if (quarter % 2 != 0) srcWpx else srcHpx
 
     // Keeps the playhead in sync, picks up the real duration, and stops at the end of the range.
     LaunchedEffect(player) {
@@ -318,6 +301,18 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
             if (player.currentPosition < startMs || player.currentPosition >= endMs - 100L) player.seekTo(startMs)
             player.play()
         }
+    }
+
+    fun resetCrop() {
+        aspectIdx = 0
+        crop = CropRect.Full
+    }
+
+    fun resetAll() {
+        quarter = 0; flip = false; resetCrop()
+        brightness = 0f; contrast = 0f; saturation = 0f; warmth = 0f; gray = false; lookIdx = 0
+        startMs = 0L; endMs = durationMs; mute = false
+        seekPreview(0L)
     }
 
     fun applyLook(i: Int) {
@@ -408,6 +403,16 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
         }
     }
 
+    if (!started) {
+        ToolPicker(
+            title = "Edit video",
+            tools = listOf("Trim" to GIcons.Scissors, "Crop" to GIcons.Fit, "Adjust" to GIcons.Brightness, "Filters" to GIcons.Image),
+            onClose = onClose,
+            onPick = { tool = Tool.values()[it]; started = true },
+        )
+        return
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -424,6 +429,15 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                 "Edit", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground,
                 modifier = Modifier.weight(1f).padding(start = 14.dp),
             )
+            if (hasEdits) {
+                Text(
+                    "Reset", color = cs.onSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .bounceClick(onClick = { resetAll() })
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                )
+            }
             val saveBg by animateColorAsState(if (hasEdits) cs.primary else cs.surfaceVariant, tween(220), label = "saveBg")
             val saveFg by animateColorAsState(if (hasEdits) cs.onPrimary else cs.onSurfaceVariant, tween(220), label = "saveFg")
             Box(
@@ -439,20 +453,17 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
             }
         }
 
-        // Preview: rotate, flip, crop and colour are applied to the view so edits show live.
+        // Preview: rotation and flip are applied to the view, colour through the layer paint.
         Box(
             modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 val odd = quarter % 2 != 0
-                val srcW = item.width.coerceAtLeast(1)
-                val srcH = item.height.coerceAtLeast(1)
-                val frame = if (odd) srcH.toFloat() / srcW else srcW.toFloat() / srcH
-                val ratio = Aspects[aspectIdx].ratio ?: frame
+                val frame = fW.toFloat() / fH
                 val boxAspect = maxWidth.value / maxHeight.value
-                val bw = if (boxAspect > ratio) maxHeight * ratio else maxWidth
-                val bh = if (boxAspect > ratio) maxHeight else maxWidth / ratio
+                val bw = if (boxAspect > frame) maxHeight * frame else maxWidth
+                val bh = if (boxAspect > frame) maxHeight else maxWidth / frame
 
                 Box(
                     modifier = Modifier
@@ -471,7 +482,7 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                             v.apply {
                                 useController = false
                                 this.player = exo
-                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                             }
                         },
                         update = { pv ->
@@ -483,21 +494,32 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                         },
                     )
                 }
-                Box(
-                    Modifier
-                        .requiredSize(bw, bh)
-                        .pointerInput(Unit) { detectTapGestures { togglePlay() } },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (!playing) {
-                        Box(
-                            Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(28.dp))
-                                .background(Color.Black.copy(alpha = 0.45f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            androidx.compose.material3.Icon(GIcons.Play, "Play", tint = Color.White, modifier = Modifier.size(26.dp))
+                if (tool == Tool.Crop) {
+                    CropOverlay(
+                        bw = fW,
+                        bh = fH,
+                        crop = crop,
+                        aspect = CropAspects[aspectIdx].second,
+                        onCrop = { crop = it },
+                        modifier = Modifier.requiredSize(bw, bh),
+                    )
+                } else {
+                    Box(
+                        Modifier
+                            .requiredSize(bw, bh)
+                            .pointerInput(Unit) { detectTapGestures { togglePlay() } },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (!playing) {
+                            Box(
+                                Modifier
+                                    .size(56.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xB8141414)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                androidx.compose.material3.Icon(GIcons.Play, "Play", tint = Color.White, modifier = Modifier.size(26.dp))
+                            }
                         }
                     }
                 }
@@ -554,23 +576,27 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Row(
-                            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Aspects.forEachIndexed { i, a -> Chip(a.label, aspectIdx == i) { aspectIdx = i } }
+                        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            CropAspects.take(4).forEachIndexed { i, (label, a) ->
+                                Chip(label, aspectIdx == i) {
+                                    aspectIdx = i
+                                    crop = fitAspect(a, fW, fH)
+                                }
+                            }
                         }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        GIconButton(GIcons.RotateLeft, "Rotate left", onClick = { quarter = (quarter + 1) % 4 }, size = 40.dp)
+                        GIconButton(
+                            GIcons.RotateLeft, "Rotate left",
+                            onClick = { quarter = (quarter + 1) % 4; resetCrop() },
+                            size = 40.dp,
+                        )
                         Box(Modifier.size(6.dp))
-                        GIconButton(GIcons.Flip, "Flip horizontally", onClick = { flip = !flip }, size = 40.dp)
-                        Text(
-                            "Crop keeps the centre of the frame",
-                            fontSize = 12.sp, color = cs.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 14.dp),
+                        GIconButton(
+                            GIcons.Flip, "Flip horizontally",
+                            onClick = { flip = !flip; resetCrop() },
+                            size = 40.dp,
                         )
                     }
+                    Text("Drag the corners to crop", fontSize = 12.sp, color = cs.onSurfaceVariant)
                 }
 
                 Tool.Adjust -> Column(modifier = Modifier.padding(horizontal = 20.dp)) {

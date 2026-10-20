@@ -104,24 +104,6 @@ fun InfoSheet(
                 for (r in info.rows) InfoLine(r, onEdit = if (r.title == "Label" && item.id >= 0) ({ renaming = true }) else null)
             }
 
-            if (!item.isVideo) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(card)
-                        .background(if (translucent) cs.surfaceVariant.copy(alpha = 0.6f) else cs.surfaceVariant)
-                        .bounceClick(onClick = { sleepless_index.haze.util.searchImage(context, item) })
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    androidx.compose.material3.Icon(
-                        sleepless_index.haze.ui.theme.GIcons.Search, contentDescription = null,
-                        tint = cs.primary, modifier = Modifier.size(20.dp),
-                    )
-                    Text("Search this image", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onBackground)
-                }
-            }
         }
     }
     if (renaming) RenameDialog(item.name, onDismiss = { renaming = false }, onConfirm = { renaming = false; onRename(it) })

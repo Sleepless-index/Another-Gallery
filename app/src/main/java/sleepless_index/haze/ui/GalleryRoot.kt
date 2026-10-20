@@ -63,7 +63,6 @@ fun GalleryRoot(
     onGrantAll: () -> Unit,
     onRequestMedia: () -> Unit,
     onRequestAllFiles: () -> Unit,
-    onAuthenticate: (onSuccess: () -> Unit) -> Unit,
     onSecure: (Boolean) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -150,7 +149,6 @@ fun GalleryRoot(
             ) {
                 VaultScreen(
                     vm = vm,
-                    onAuthenticate = onAuthenticate,
                     onBack = { nav.popBackStack() },
                     onOpen = openViewer,
                 )

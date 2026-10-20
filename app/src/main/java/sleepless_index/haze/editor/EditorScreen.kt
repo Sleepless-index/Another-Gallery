@@ -32,6 +32,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,16 +76,16 @@ import kotlin.math.hypot
 import kotlin.math.min
 import androidx.compose.ui.graphics.ColorMatrix as ComposeColorMatrix
 
-private data class Crop(val l: Float, val t: Float, val r: Float, val b: Float) {
+internal data class Crop(val l: Float, val t: Float, val r: Float, val b: Float) {
     companion object {
         val Full = Crop(0f, 0f, 1f, 1f)
     }
 }
 
-private val Aspects = listOf("Free" to 0f, "1:1" to 1f, "4:5" to 0.8f, "16:9" to 16f / 9f, "3:4" to 0.75f)
+internal val Aspects = listOf("Free" to 0f, "1:1" to 1f, "4:5" to 0.8f, "16:9" to 16f / 9f, "3:4" to 0.75f)
 
 /** Largest centered crop with the given aspect (w/h, in pixels) inside a bw x bh image. */
-private fun fitAspect(aspect: Float, bw: Int, bh: Int): Crop {
+internal fun fitAspect(aspect: Float, bw: Int, bh: Int): Crop {
     if (aspect <= 0f) return Crop.Full
     val imageAspect = bw.toFloat() / bh
     return if (aspect > imageAspect) {
@@ -96,7 +97,7 @@ private fun fitAspect(aspect: Float, bw: Int, bh: Int): Crop {
     }
 }
 
-private fun displayedRect(boxW: Float, boxH: Float, bw: Int, bh: Int): Rect {
+internal fun displayedRect(boxW: Float, boxH: Float, bw: Int, bh: Int): Rect {
     val s = min(boxW / bw, boxH / bh)
     val dw = bw * s
     val dh = bh * s
@@ -106,7 +107,7 @@ private fun displayedRect(boxW: Float, boxH: Float, bw: Int, bh: Int): Rect {
 }
 
 @Composable
-private fun CropOverlay(
+internal fun CropOverlay(
     bw: Int,
     bh: Int,
     crop: Crop,
@@ -338,6 +339,7 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     var warmth by remember { mutableFloatStateOf(0f) }
     var filterIdx by remember { mutableIntStateOf(0) }
     var saving by remember { mutableStateOf(false) }
+    var started by remember { mutableStateOf(false) }
 
     val preview by produceState<Bitmap?>(null, source, quarter, flip, straighten) {
         val s = source
@@ -357,6 +359,11 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     fun resetCrop() {
         aspectIdx = 0
         crop = Crop.Full
+    }
+
+    fun reset() {
+        quarter = 0; flip = false; straighten = 0f; aspectIdx = 0; crop = Crop.Full
+        brightness = 0f; contrast = 1f; saturation = 1f; warmth = 0f; filterIdx = 0
     }
 
     fun save() {
@@ -390,6 +397,16 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
         }
     }
 
+    if (!started) {
+        ToolPicker(
+            title = "Edit photo",
+            tools = listOf("Crop" to GIcons.Fit, "Adjust" to GIcons.Brightness, "Filters" to GIcons.Image),
+            onClose = onClose,
+            onPick = { tab = it; started = true },
+        )
+        return
+    }
+
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Row(
             modifier = Modifier
@@ -404,6 +421,15 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                     .weight(1f)
                     .padding(start = 14.dp),
             )
+            if (hasEdits) {
+                Text(
+                    "Reset", color = cs.onSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .bounceClick(onClick = { reset() })
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                )
+            }
             val saveBg by animateColorAsState(
                 if (hasEdits) cs.primary else cs.surfaceVariant, tween(220), label = "saveBg"
             )
@@ -564,6 +590,56 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                                 color = if (selected) cs.primary else cs.onSurfaceVariant,
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** First screen of an editor: pick the tool to start with. */
+@Composable
+internal fun ToolPicker(
+    title: String,
+    tools: List<Pair<String, androidx.compose.ui.graphics.vector.ImageVector>>,
+    onClose: () -> Unit,
+    onPick: (Int) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            GIconButton(GIcons.Close, "Close editor", onClick = onClose)
+            Text(
+                title, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground,
+                modifier = Modifier.padding(start = 14.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text("What do you want to do?", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
+            Text(
+                "You can switch tools any time.", fontSize = 13.sp, color = cs.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 18.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                tools.forEachIndexed { i, (label, icon) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(cs.surfaceVariant)
+                            .bounceClick(onClick = { onPick(i) })
+                            .padding(horizontal = 18.dp, vertical = 18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Icon(icon, null, tint = cs.primary, modifier = Modifier.size(24.dp))
+                        Text(label, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
                     }
                 }
             }

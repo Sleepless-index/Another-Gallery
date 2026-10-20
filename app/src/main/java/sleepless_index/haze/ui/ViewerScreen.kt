@@ -257,6 +257,21 @@ fun ViewerScreen(
         }
 
         AnimatedVisibility(
+            visible = chrome && !current.isVideo && !inVault,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = bottomBarH + 8.dp),
+            enter = fadeIn(tween(180)) + scaleIn(tween(200)),
+            exit = fadeOut(tween(140)) + scaleOut(tween(160)),
+        ) {
+            GIconButton(
+                GIcons.Search, "Search this image",
+                onClick = { sleepless_index.haze.util.searchImage(context, current) },
+                size = 52.dp,
+                container = MaterialTheme.colorScheme.primary,
+                tint = MaterialTheme.colorScheme.onPrimary,
+            )
+        }
+
+        AnimatedVisibility(
             visible = chrome,
             modifier = Modifier.align(Alignment.BottomCenter),
             enter = fadeIn(tween(180)) + slideInVertically(tween(240)) { it / 2 },
@@ -361,15 +376,15 @@ private fun VideoPage(
             )
             Box(
                 modifier = Modifier
-                    .size(76.dp)
+                    .size(72.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
+                    .background(Color(0xB8141414))
                     .bounceClick(onClick = onPlay),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     GIcons.Play, contentDescription = "Play video",
-                    tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(32.dp),
+                    tint = Color.White, modifier = Modifier.size(36.dp),
                 )
             }
             DurationBadge(item.durationMs, Modifier.align(Alignment.BottomEnd).padding(6.dp))

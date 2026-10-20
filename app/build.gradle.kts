@@ -98,7 +98,6 @@ dependencies {
     implementation("androidx.media3:media3-transformer:1.5.1")
     implementation("androidx.media3:media3-effect:1.5.1")
 
-    implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("androidx.print:print:1.0.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
