@@ -62,6 +62,7 @@ class GalleryViewModel(app: Application) : AndroidViewModel(app) {
     fun setShuffle(v: Boolean) = viewModelScope.launch { g.settings.setShuffle(v) }
     fun setAutoNext(v: Boolean) = viewModelScope.launch { g.settings.setAutoNext(v) }
     fun setBgPlay(v: Boolean) = viewModelScope.launch { g.settings.setBgPlay(v) }
+    fun setAmbient(v: Boolean) = viewModelScope.launch { g.settings.setAmbient(v) }
 
     // ---- media ----------------------------------------------------------
     /** Everything MediaStore returned, including items in hidden albums. */

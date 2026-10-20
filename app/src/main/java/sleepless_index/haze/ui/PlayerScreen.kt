@@ -97,6 +97,8 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaMetadata
 import androidx.media3.session.MediaSession
 import androidx.compose.runtime.key
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.platform.LocalDensity
@@ -301,7 +303,7 @@ private fun exoItemFor(v: MediaItem, subs: List<ExoMediaItem.SubtitleConfigurati
         .build()
 
 @Composable
-fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenVideo: (Long) -> Unit, onTrim: (Long) -> Unit = {}) {
+fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenVideo: (Long) -> Unit) {
     val startItem = remember(itemId) { vm.findItem(itemId) }
     if (startItem == null) {
         LaunchedEffect(Unit) { onBack() }
@@ -319,9 +321,13 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
 
     // The queue: every video in the list the viewer was opened from. ExoPlayer holds all of it,
     // so next / previous / loop / shuffle keep working with the screen off.
-    val queue = remember(itemId) {
+    val originalQueue = remember(itemId) {
         val vids = vm.viewerList.value.filter { it.isVideo }
         if (vids.any { it.id == startItem.id }) vids else listOf(startItem)
+    }
+    // Live queue order. Shuffle really reorders it (and ExoPlayer's playlist) so the list matches playback.
+    val queue = remember(itemId) {
+        androidx.compose.runtime.mutableStateListOf<sleepless_index.haze.data.MediaItem>().apply { addAll(originalQueue) }
     }
     val startIdx = remember(queue) { queue.indexOfFirst { it.id == startItem.id }.coerceAtLeast(0) }
     var curIdx by remember { mutableIntStateOf(startIdx) }
@@ -402,6 +408,10 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     var moreMenu by remember { mutableStateOf(false) }
     var queueSheet by remember { mutableStateOf(false) }
     var mirror by remember { mutableStateOf(false) }
+    var ambientTick by remember { mutableIntStateOf(0) }
+    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
+    val ambientBmp = remember { android.graphics.Bitmap.createBitmap(32, 18, android.graphics.Bitmap.Config.ARGB_8888) }
+    val ambientImage = remember(ambientBmp) { ambientBmp.asImageBitmap() }
     var timerMin by remember { mutableIntStateOf(0) }
     var navTick by remember { mutableIntStateOf(0) }
     var scrubbing by remember { mutableStateOf(false) }
@@ -566,9 +576,44 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
             LoopMode.OFF -> Player.REPEAT_MODE_OFF
             LoopMode.ONCE, LoopMode.REPEAT -> Player.REPEAT_MODE_ONE
         }
-        player.shuffleModeEnabled = prefs.shuffle
+        player.shuffleModeEnabled = false
         player.pauseAtEndOfMediaItems = !(prefs.autoNext || prefs.shuffle)
         navTick++
+    }
+
+    // Shuffle moves the videos around in the queue (the one playing stays put at the top);
+    // turning it off puts them back in their original order.
+    LaunchedEffect(prefs.shuffle) {
+        val target: List<sleepless_index.haze.data.MediaItem> = if (prefs.shuffle) {
+            val cur = queue.getOrNull(player.currentMediaItemIndex)
+            if (cur == null) queue.toList() else listOf(cur) + queue.filter { it !== cur }.shuffled()
+        } else {
+            val have = queue.map { it.id }.toSet()
+            originalQueue.filter { it.id in have }
+        }
+        if (target.size == queue.size) {
+            for (i in target.indices) {
+                val j = queue.indexOfFirst { it.id == target[i].id }
+                if (j >= 0 && j != i) {
+                    player.moveMediaItem(j, i)
+                    queue.add(i, queue.removeAt(j))
+                }
+            }
+            curIdx = player.currentMediaItemIndex
+            navTick++
+        }
+    }
+
+    // Ambient light: sample a tiny copy of the current frame and glow it behind the video.
+    LaunchedEffect(prefs.ambient, playerViewRef) {
+        while (prefs.ambient) {
+            val tv = playerViewRef?.videoSurfaceView as? android.view.TextureView
+            if (tv != null && tv.isAvailable) {
+                runCatching { tv.getBitmap(ambientBmp) }
+                ambientTick++
+            }
+            delay(if (player.isPlaying) 100L else 400L)
+        }
     }
 
     // Each video opens in the orientation that suits it.
@@ -687,10 +732,24 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
     val exoPlayer = player
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         // Mirroring needs a TextureView (a SurfaceView ignores view transforms).
-        key(mirror) {
+        if (prefs.ambient) {
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize().blur(36.dp)) {
+                ambientTick
+                drawImage(
+                    image = ambientImage,
+                    dstSize = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt()),
+                    alpha = 0.9f,
+                    filterQuality = androidx.compose.ui.graphics.FilterQuality.Low,
+                    colorFilter = androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+                        androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(1.5f) }
+                    ),
+                )
+            }
+        }
+        key(mirror, prefs.ambient) {
             AndroidView(
                 factory = { ctx ->
-                    val v = if (mirror) {
+                    val v = if (mirror || prefs.ambient) {
                         android.view.LayoutInflater.from(ctx).inflate(R.layout.player_texture, null, false) as PlayerView
                     } else {
                         PlayerView(ctx)
@@ -699,6 +758,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                         useController = false
                         this.player = exoPlayer
                         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        playerViewRef = this
                     }
                 },
                 update = {
@@ -1008,6 +1068,15 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                     },
                                 )
                                 CompactMenuItem(
+                                    text = { PlayerMenuRow(GIcons.Brightness, "Ambient light", prefs.ambient) },
+                                    onClick = {
+                                        moreMenu = false
+                                        val on = !prefs.ambient
+                                        vm.setAmbient(on)
+                                        hud = Hud(GIcons.Brightness, if (on) "Ambient light on" else "Ambient light off")
+                                    },
+                                )
+                                CompactMenuItem(
                                     text = { PlayerMenuRow(GIcons.Subtitles, "Subtitles") },
                                     onClick = {
                                         moreMenu = false
@@ -1048,14 +1117,6 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                     onClick = {
                                         moreMenu = false
                                         mirror = !mirror
-                                    },
-                                )
-                                CompactMenuItem(
-                                    text = { PlayerMenuRow(GIcons.Scissors, "Trim") },
-                                    onClick = {
-                                        moreMenu = false
-                                        player.pause()
-                                        onTrim(item.id)
                                     },
                                 )
                                 CompactMenuItem(

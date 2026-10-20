@@ -289,19 +289,11 @@ fun ViewerScreen(
                         onClick = { vm.toggleFavorite(listOf(current.id)) },
                         modifier = Modifier.weight(1f),
                     )
-                    if (current.isVideo) {
-                        PillItem(
-                            icon = GIcons.Info, label = "Details", selected = false,
-                            onClick = { showInfo = true },
-                            modifier = Modifier.weight(1f),
-                        )
-                    } else {
-                        PillItem(
-                            icon = GIcons.Edit, label = "Edit", selected = false,
-                            onClick = { onEdit(current) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                    PillItem(
+                        icon = GIcons.Edit, label = "Edit", selected = false,
+                        onClick = { onEdit(current) },
+                        modifier = Modifier.weight(1f),
+                    )
                     PillItem(
                         icon = GIcons.Trash, label = "Delete", selected = false,
                         onClick = { vm.requestTrash(listOf(current)) },

@@ -1,4 +1,4 @@
-@file:OptIn(androidx.media3.common.util.UnstableApi::class)
+@file:OptIn(androidx.media3.common.util.UnstableApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package sleepless_index.haze.ui
 
@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,19 +20,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,11 +55,20 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem as ExoMediaItem
 import androidx.media3.common.Player
+import androidx.media3.effect.Brightness
+import androidx.media3.effect.Contrast
+import androidx.media3.effect.Crop
+import androidx.media3.effect.HslAdjustment
+import androidx.media3.effect.RgbAdjustment
+import androidx.media3.effect.RgbFilter
+import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
@@ -81,9 +94,93 @@ private const val MIN_CLIP_MS = 500L
 private val HandleW = 22.dp
 private val StripH = 56.dp
 
-/** Video trimmer: pick a start and end, preview the range, save the cut as a new video. */
+private enum class Tool(val label: String) { Trim("Trim"), Crop("Crop"), Adjust("Adjust"), Filters("Filters") }
+
+private data class Look(
+    val name: String,
+    val brightness: Float,
+    val contrast: Float,
+    val saturation: Float,
+    val warmth: Float,
+    val gray: Boolean,
+)
+
+private val Looks = listOf(
+    Look("None", 0f, 0f, 0f, 0f, false),
+    Look("B&W", 0f, 0.1f, 0f, 0f, true),
+    Look("Noir", -0.05f, 0.4f, 0f, 0f, true),
+    Look("Warm", 0.02f, 0.05f, 12f, 0.6f, false),
+    Look("Cool", 0f, 0.05f, 5f, -0.6f, false),
+    Look("Vivid", 0.02f, 0.2f, 45f, 0f, false),
+    Look("Fade", 0.1f, -0.25f, -25f, 0.1f, false),
+)
+
+private data class AspectOpt(val label: String, val ratio: Float?)
+
+private val Aspects = listOf(
+    AspectOpt("Original", null),
+    AspectOpt("1:1", 1f),
+    AspectOpt("4:5", 0.8f),
+    AspectOpt("3:4", 0.75f),
+    AspectOpt("9:16", 9f / 16f),
+    AspectOpt("16:9", 16f / 9f),
+    AspectOpt("21:9", 21f / 9f),
+)
+
+/** Turns the editor's choices into Media3 effects (used for the live preview and the export). */
+private fun buildEffects(
+    quarter: Int,
+    flip: Boolean,
+    aspect: Float?,
+    srcW: Int,
+    srcH: Int,
+    brightness: Float,
+    contrast: Float,
+    saturation: Float,
+    warmth: Float,
+    gray: Boolean,
+): List<Effect> {
+    val out = ArrayList<Effect>()
+    if (quarter % 4 != 0) {
+        out.add(ScaleAndRotateTransformation.Builder().setRotationDegrees((quarter % 4) * 90f).build())
+    }
+    if (flip) {
+        out.add(ScaleAndRotateTransformation.Builder().setScale(-1f, 1f).build())
+    }
+    if (aspect != null) {
+        val odd = quarter % 2 != 0
+        val fw = (if (odd) srcH else srcW).coerceAtLeast(1)
+        val fh = (if (odd) srcW else srcH).coerceAtLeast(1)
+        val frame = fw.toFloat() / fh
+        val halfW: Float
+        val halfH: Float
+        if (aspect > frame) {
+            halfW = 1f
+            halfH = (frame / aspect).coerceIn(0.05f, 1f)
+        } else {
+            halfH = 1f
+            halfW = (aspect / frame).coerceIn(0.05f, 1f)
+        }
+        if (halfW < 0.999f || halfH < 0.999f) out.add(Crop(-halfW, halfW, -halfH, halfH))
+    }
+    if (brightness != 0f) out.add(Brightness(brightness.coerceIn(-1f, 1f)))
+    if (contrast != 0f) out.add(Contrast(contrast.coerceIn(-1f, 1f)))
+    if (saturation != 0f) out.add(HslAdjustment.Builder().adjustSaturation(saturation.coerceIn(-100f, 100f)).build())
+    if (warmth != 0f) {
+        out.add(
+            RgbAdjustment.Builder()
+                .setRedScale(1f + warmth * 0.25f)
+                .setBlueScale(1f - warmth * 0.25f)
+                .build()
+        )
+    }
+    if (gray) out.add(RgbFilter.createGrayscaleFilter())
+    return out
+}
+
+/** Video editor: trim, crop, rotate, flip, adjust and filters. Saves the result as a new video. */
 @Composable
-fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
+fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     val item = remember(itemId) { vm.findItem(itemId) }
     if (item == null) {
         LaunchedEffect(Unit) { onClose() }
@@ -104,6 +201,7 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     }
     DisposableEffect(Unit) { onDispose { player.release() } }
 
+    var tool by remember { mutableStateOf(Tool.Trim) }
     var durationMs by remember { mutableLongStateOf(item.durationMs.coerceAtLeast(1L)) }
     var startMs by remember { mutableLongStateOf(0L) }
     var endMs by remember { mutableLongStateOf(item.durationMs.coerceAtLeast(1L)) }
@@ -114,21 +212,23 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     var progress by remember { mutableFloatStateOf(0f) }
     var transformer by remember { mutableStateOf<Transformer?>(null) }
 
-    // The real duration is known once the player has read the file.
-    DisposableEffect(player) {
-        val l = object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_READY && player.duration > 0 && player.duration != durationMs) {
-                    val wasFull = endMs >= durationMs
-                    durationMs = player.duration
-                    if (wasFull) endMs = durationMs
-                }
-            }
-            override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
-        }
-        player.addListener(l)
-        onDispose { player.removeListener(l) }
+    var quarter by remember { mutableIntStateOf(0) }
+    var flip by remember { mutableStateOf(false) }
+    var aspectIdx by remember { mutableIntStateOf(0) }
+    var brightness by remember { mutableFloatStateOf(0f) }
+    var contrast by remember { mutableFloatStateOf(0f) }
+    var saturation by remember { mutableFloatStateOf(0f) }
+    var warmth by remember { mutableFloatStateOf(0f) }
+    var gray by remember { mutableStateOf(false) }
+    var lookIdx by remember { mutableIntStateOf(0) }
+
+    val effects = remember(quarter, flip, aspectIdx, brightness, contrast, saturation, warmth, gray) {
+        buildEffects(
+            quarter, flip, Aspects[aspectIdx].ratio, item.width, item.height,
+            brightness, contrast, saturation, warmth, gray,
+        )
     }
+    LaunchedEffect(effects) { player.setVideoEffects(effects) }
 
     // Keeps the playhead in sync, picks up the real duration, and stops at the end of the range.
     LaunchedEffect(player) {
@@ -167,13 +267,23 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
         }
     }
 
+    fun applyLook(i: Int) {
+        lookIdx = i
+        val l = Looks[i]
+        brightness = l.brightness
+        contrast = l.contrast
+        saturation = l.saturation
+        warmth = l.warmth
+        gray = l.gray
+    }
+
     fun save() {
         if (exporting) return
         player.pause()
         exporting = true
         progress = 0f
         scope.launch {
-            val out = File(context.cacheDir, "trim_${System.currentTimeMillis()}.mp4")
+            val out = File(context.cacheDir, "edit_${System.currentTimeMillis()}.mp4")
             val ok = runCatching {
                 suspendCancellableCoroutine<Boolean> { cont ->
                     val clip = ExoMediaItem.ClippingConfiguration.Builder()
@@ -181,7 +291,10 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                         .setEndPositionMs(endMs)
                         .build()
                     val media = ExoMediaItem.Builder().setUri(item.uri).setClippingConfiguration(clip).build()
-                    val edited = EditedMediaItem.Builder(media).setRemoveAudio(mute).build()
+                    val edited = EditedMediaItem.Builder(media)
+                        .setRemoveAudio(mute)
+                        .setEffects(Effects(emptyList(), effects))
+                        .build()
                     val t = Transformer.Builder(context)
                         .addListener(object : Transformer.Listener {
                             override fun onCompleted(composition: Composition, exportResult: ExportResult) {
@@ -199,7 +312,6 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                     transformer = t
                     cont.invokeOnCancellation { t.cancel() }
                     t.start(edited, out.absolutePath)
-                    // Poll progress while the export runs.
                     scope.launch {
                         val holder = ProgressHolder()
                         while (cont.isActive) {
@@ -221,7 +333,7 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                             MediaOps.insert(
                                 context = context,
                                 input = input,
-                                name = "${base}_trim.mp4",
+                                name = "${base}_edit.mp4",
                                 mime = "video/mp4",
                                 isVideo = true,
                                 dateMs = item.dateMs,
@@ -238,7 +350,7 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                 vm.refresh()
                 onClose()
             } else {
-                vm.message("Couldn't trim this video")
+                vm.message("Couldn't save this video")
             }
         }
     }
@@ -255,14 +367,25 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            GIconButton(GIcons.Close, "Close trimmer", onClick = { if (!exporting) onClose() })
+            GIconButton(GIcons.Close, "Close editor", onClick = { if (!exporting) onClose() })
             Text(
-                "Trim", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = Color.White,
+                "Edit video", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = Color.White,
                 modifier = Modifier.weight(1f).padding(start = 14.dp),
             )
+            Box(
+                modifier = Modifier
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(cs.primary)
+                    .bounceClick(onClick = { save() })
+                    .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("Save copy", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = cs.onPrimary)
+            }
         }
 
-        // Preview
+        // Preview (shows the effects live)
         Box(Modifier.weight(1f).fillMaxWidth().background(Color.Black)) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
@@ -277,78 +400,116 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                     }
                 },
             )
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        // Times
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(formatTime(startMs), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
-            Text(
-                "${formatTime(endMs - startMs)} selected",
-                fontSize = 13.sp, color = cs.onSurfaceVariant,
-            )
-            Text(formatTime(endMs), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
-        TrimStrip(
-            item = item,
-            durationMs = durationMs,
-            startMs = startMs,
-            endMs = endMs,
-            playheadMs = playhead,
-            accent = cs.primary,
-            onStart = { startMs = it; seekPreview(it) },
-            onEnd = { endMs = it; seekPreview((it - 300L).coerceAtLeast(startMs)) },
-            onScrub = { seekPreview(it.coerceIn(startMs, endMs)) },
-        )
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Controls
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            GIconButton(
-                if (playing) GIcons.Pause else GIcons.Play,
-                if (playing) "Pause preview" else "Play preview",
-                onClick = { togglePlay() },
-            )
+            // Tap the preview to play or pause
             Box(
-                modifier = Modifier
-                    .height(44.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(if (mute) cs.primary.copy(alpha = 0.22f) else cs.surfaceVariant)
-                    .bounceClick(onClick = { mute = !mute })
-                    .padding(horizontal = 16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    if (mute) "Audio off" else "Audio on",
-                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                    color = if (mute) cs.primary else cs.onBackground,
-                )
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) { detectTapGestures { togglePlay() } }
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Tool panel
+        Box(Modifier.fillMaxWidth().height(150.dp)) {
+            when (tool) {
+                Tool.Trim -> Column(Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(formatTime(startMs), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("${formatTime(endMs - startMs)} selected", fontSize = 13.sp, color = cs.onSurfaceVariant)
+                        Text(formatTime(endMs), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
+                        TrimStrip(
+                            item = item,
+                            durationMs = durationMs,
+                            startMs = startMs,
+                            endMs = endMs,
+                            playheadMs = playhead,
+                            accent = cs.primary,
+                            onStart = { startMs = it; seekPreview(it) },
+                            onEnd = { endMs = it; seekPreview((it - 300L).coerceAtLeast(startMs)) },
+                            onScrub = { seekPreview(it.coerceIn(startMs, endMs)) },
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        GIconButton(
+                            if (playing) GIcons.Pause else GIcons.Play,
+                            if (playing) "Pause preview" else "Play preview",
+                            onClick = { togglePlay() },
+                        )
+                        EditChip(if (mute) "Audio off" else "Audio on", mute) { mute = !mute }
+                    }
+                }
+
+                Tool.Crop -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Aspects.forEachIndexed { i, a -> EditChip(a.label, aspectIdx == i) { aspectIdx = i } }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        EditChip("Rotate left", false) { quarter = (quarter + 1) % 4 }
+                        EditChip("Rotate right", false) { quarter = (quarter + 3) % 4 }
+                        EditChip("Flip", flip) { flip = !flip }
+                    }
+                    Text(
+                        "Crop keeps the centre of the frame.",
+                        fontSize = 12.sp, color = cs.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                    )
+                }
+
+                Tool.Adjust -> Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+                ) {
+                    AdjustRow("Brightness", brightness, -0.5f..0.5f) { brightness = it; lookIdx = -1 }
+                    AdjustRow("Contrast", contrast, -0.5f..0.5f) { contrast = it; lookIdx = -1 }
+                    AdjustRow("Saturation", saturation, -100f..100f) { saturation = it; lookIdx = -1 }
+                    AdjustRow("Warmth", warmth, -1f..1f) { warmth = it; lookIdx = -1 }
+                }
+
+                Tool.Filters -> Row(
+                    modifier = Modifier.fillMaxSize().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Looks.forEachIndexed { i, l -> EditChip(l.name, lookIdx == i) { applyLook(i) } }
+                }
             }
-            Spacer(Modifier.weight(1f))
-            Box(
-                modifier = Modifier
-                    .height(44.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(cs.primary)
-                    .bounceClick(onClick = { save() })
-                    .padding(horizontal = 22.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Save copy", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = cs.onPrimary)
+        }
+
+        // Tool tabs
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            Tool.values().forEach { t ->
+                val selected = tool == t
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(if (selected) cs.primary.copy(alpha = 0.2f) else Color.Transparent)
+                        .bounceClick(onClick = { tool = t })
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                ) {
+                    Text(
+                        t.label, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        color = if (selected) cs.primary else cs.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -370,17 +531,14 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text("Trimming…", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                Text("Saving…", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
                 LinearProgressIndicator(
                     progress = { progress.coerceIn(0f, 1f) },
                     modifier = Modifier.width(220.dp),
                     color = cs.primary,
                     trackColor = cs.surfaceVariant,
                 )
-                Text(
-                    "${(progress * 100).roundToInt()}%",
-                    fontSize = 13.sp, color = cs.onSurfaceVariant,
-                )
+                Text("${(progress * 100).roundToInt()}%", fontSize = 13.sp, color = cs.onSurfaceVariant)
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
@@ -395,9 +553,47 @@ fun TrimScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     }
 }
 
+@Composable
+private fun EditChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .height(40.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (selected) cs.primary.copy(alpha = 0.22f) else cs.surfaceVariant)
+            .bounceClick(onClick = onClick)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            color = if (selected) cs.primary else cs.onBackground,
+        )
+    }
+}
+
+@Composable
+private fun AdjustRow(label: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontSize = 13.sp, color = cs.onSurfaceVariant, modifier = Modifier.width(84.dp))
+        Slider(
+            value = value,
+            onValueChange = onChange,
+            valueRange = range,
+            modifier = Modifier.weight(1f),
+            colors = SliderDefaults.colors(
+                thumbColor = cs.primary,
+                activeTrackColor = cs.primary,
+                inactiveTrackColor = cs.surfaceVariant,
+            ),
+        )
+    }
+}
+
 /** Frame strip with two draggable handles and a playhead. */
 @Composable
-private fun TrimStrip(
+internal fun TrimStrip(
     item: sleepless_index.haze.data.MediaItem,
     durationMs: Long,
     startMs: Long,

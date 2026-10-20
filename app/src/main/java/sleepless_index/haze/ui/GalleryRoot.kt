@@ -87,10 +87,10 @@ fun GalleryRoot(
     val isTab = route in TabRoutes
 
     val vaultOpen by vm.vaultUnlocked.collectAsStateWithLifecycle()
-    LaunchedEffect(vaultOpen, route) { onSecure(vaultOpen && (route == "vault" || route?.startsWith("viewer") == true || route?.startsWith("player") == true || route?.startsWith("editor") == true || route?.startsWith("trim") == true)) }
+    LaunchedEffect(vaultOpen, route) { onSecure(vaultOpen && (route == "vault" || route?.startsWith("viewer") == true || route?.startsWith("player") == true || route?.startsWith("editor") == true || route?.startsWith("videoedit") == true)) }
     // Leaving the vault locks it again.
     LaunchedEffect(route) {
-        if (vaultOpen && route != null && route != "vault" && !route.startsWith("viewer") && !route.startsWith("player") && !route.startsWith("trim")) vm.lockVault()
+        if (vaultOpen && route != null && route != "vault" && !route.startsWith("viewer") && !route.startsWith("player") && !route.startsWith("videoedit")) vm.lockVault()
     }
 
     BackHandler(enabled = selectMode) { vm.clearSelection() }
@@ -223,7 +223,7 @@ fun GalleryRoot(
                     startIndex = backStackEntry.arguments?.getInt("index") ?: 0,
                     onBack = { nav.popBackStack() },
                     onPlay = { item -> nav.navigate("player/${item.id}") },
-                    onEdit = { item -> nav.navigate("editor/${item.id}") },
+                    onEdit = { item -> nav.navigate(if (item.isVideo) "videoedit/${item.id}" else "editor/${item.id}") },
                 )
             }
 
@@ -242,17 +242,16 @@ fun GalleryRoot(
                             popUpTo(backStackEntry.destination.id) { inclusive = true }
                         }
                     },
-                    onTrim = { id -> nav.navigate("trim/$id") },
                 )
             }
 
             composable(
-                route = "trim/{id}",
+                route = "videoedit/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.LongType }),
                 enterTransition = { slideInVertically(tween(320)) { it / 6 } + fadeIn(tween(280)) },
                 popExitTransition = { slideOutVertically(tween(260)) { it / 6 } + fadeOut(tween(220)) },
             ) { backStackEntry ->
-                TrimScreen(
+                VideoEditorScreen(
                     vm = vm,
                     itemId = backStackEntry.arguments?.getLong("id") ?: 0L,
                     onClose = { nav.popBackStack() },
