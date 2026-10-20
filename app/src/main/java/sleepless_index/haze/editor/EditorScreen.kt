@@ -330,7 +330,7 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
         }
     }
 
-    var tab by remember { mutableIntStateOf(0) }
+    var tab by remember { mutableIntStateOf(-1) }
     var quarter by remember { mutableIntStateOf(0) }
     var flip by remember { mutableStateOf(false) }
     var straighten by remember { mutableFloatStateOf(0f) }
@@ -342,7 +342,6 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     var warmth by remember { mutableFloatStateOf(0f) }
     var filterIdx by remember { mutableIntStateOf(0) }
     var saving by remember { mutableStateOf(false) }
-    var started by remember { mutableStateOf(false) }
 
     val preview by produceState<Bitmap?>(null, source, quarter, flip, straighten) {
         val s = source
@@ -400,20 +399,7 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
         }
     }
 
-    AnimatedContent(
-        targetState = started,
-        transitionSpec = { fadeIn(tween(320)) togetherWith fadeOut(tween(180)) },
-        label = "editorStart",
-    ) { isStarted ->
-    if (!isStarted) {
-        ToolPicker(
-            title = "Edit photo",
-            item = item,
-            tools = listOf("Crop" to GIcons.Fit, "Adjust" to GIcons.Brightness, "Filters" to GIcons.Image),
-            onClose = onClose,
-            onPick = { tab = it; started = true },
-        )
-    } else Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -510,6 +496,9 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                 .heightIn(min = 190.dp),
         ) { current ->
             when (current) {
+                -1 -> Box(Modifier.fillMaxWidth().heightIn(min = 190.dp), contentAlignment = Alignment.Center) {
+                    Text("Choose a tool to start editing", fontSize = 13.sp, color = cs.onSurfaceVariant)
+                }
                 0 -> Column(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -599,58 +588,6 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                     }
                 }
             }
-        }
-    }
-    }
-}
-
-/** First screen of an editor: the media with a row of round tool buttons to start from. */
-@Composable
-internal fun ToolPicker(
-    title: String,
-    item: sleepless_index.haze.data.MediaItem,
-    tools: List<Pair<String, androidx.compose.ui.graphics.vector.ImageVector>>,
-    onClose: () -> Unit,
-    onPick: (Int) -> Unit,
-) {
-    val cs = MaterialTheme.colorScheme
-    val context = LocalContext.current
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            GIconButton(GIcons.Close, "Close editor", onClick = onClose)
-            Text(
-                title, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground,
-                modifier = Modifier.padding(start = 14.dp),
-            )
-        }
-        Box(
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            val request = remember(item.uri) {
-                coil.request.ImageRequest.Builder(context)
-                    .data(item.uri)
-                    .apply { if (item.isVideo) videoFrameMillis(0L) }
-                    .size(1600)
-                    .build()
-            }
-            coil.compose.AsyncImage(
-                model = request,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 14.dp),
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            tools.forEachIndexed { i, (label, _) -> TabPill(label, false) { onPick(i) } }
         }
     }
 }

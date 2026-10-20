@@ -59,16 +59,22 @@ object VaultLockStore {
     }
 
     /** Stored as "type|salt|hash". */
+    const val PIN_LENGTH = 4
+
     fun make(type: String, secret: String): String {
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        return type + "|" + salt.joinToString("") { "%02x".format(it) } + "|" + hash(secret, salt)
+        val base = type + "|" + salt.joinToString("") { "%02x".format(it) } + "|" + hash(secret, salt)
+        return if (type == PIN) base + "|" + secret.length else base
     }
 
-    fun typeOf(stored: String): String? = stored.split("|").takeIf { it.size == 3 }?.get(0)
+    fun typeOf(stored: String): String? = stored.split("|").takeIf { it.size >= 3 }?.get(0)
+
+    /** Digits in a saved PIN, or null for older PINs that were saved without one. */
+    fun pinLength(stored: String): Int? = stored.split("|").getOrNull(3)?.toIntOrNull()
 
     fun verify(stored: String, secret: String): Boolean {
         val parts = stored.split("|")
-        if (parts.size != 3) return false
+        if (parts.size < 3) return false
         val salt = ByteArray(parts[1].length / 2) { parts[1].substring(it * 2, it * 2 + 2).toInt(16).toByte() }
         return MessageDigest.isEqual(hash(secret, salt).toByteArray(), parts[2].toByteArray())
     }
@@ -82,21 +88,21 @@ private fun typeName(type: String) = when (type) {
 
 /** Collects a secret of the given type. [resetKey] clears the input (after a wrong try). */
 @Composable
-fun SecretInput(type: String, resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (String) -> Unit) {
+fun SecretInput(type: String, resetKey: Int, pinLength: Int?, onSubmit: (String) -> Unit, onTooShort: (String) -> Unit) {
     when (type) {
-        VaultLockStore.PIN -> PinPad(resetKey, onSubmit, onTooShort)
+        VaultLockStore.PIN -> PinPad(resetKey, pinLength, onSubmit, onTooShort)
         VaultLockStore.PATTERN -> PatternPad(resetKey, onSubmit, onTooShort)
         else -> PasswordEntry(resetKey, onSubmit, onTooShort)
     }
 }
 
 @Composable
-private fun PinPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (String) -> Unit) {
+private fun PinPad(resetKey: Int, length: Int?, onSubmit: (String) -> Unit, onTooShort: (String) -> Unit) {
     val cs = MaterialTheme.colorScheme
     var pin by remember(resetKey) { mutableStateOf("") }
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(Modifier.padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            repeat(maxOf(4, pin.length)) { i ->
+            repeat(length ?: maxOf(4, pin.length)) { i ->
                 Box(
                     Modifier
                         .size(14.dp)
@@ -105,30 +111,41 @@ private fun PinPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (Strin
                 )
             }
         }
-        val rows = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("⌫", "0", "OK"))
+        val last = if (length == null) "OK" else ""
+        val rows = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("⌫", "0", last))
         rows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
                 row.forEach { key ->
-                    Box(
-                        Modifier
-                            .size(72.dp)
-                            .clip(CircleShape)
-                            .background(if (key == "OK") cs.primary else cs.surfaceVariant.copy(alpha = 0.7f))
-                            .bounceClick {
-                                when (key) {
-                                    "⌫" -> pin = pin.dropLast(1)
-                                    "OK" -> if (pin.length >= 4) onSubmit(pin) else onTooShort("Use at least 4 digits")
-                                    else -> if (pin.length < 12) pin += key
-                                }
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            key,
-                            fontSize = if (key[0].isDigit()) 28.sp else 17.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (key == "OK") cs.onPrimary else cs.onBackground,
-                        )
+                    if (key.isEmpty()) {
+                        Box(Modifier.size(72.dp))
+                    } else {
+                        Box(
+                            Modifier
+                                .size(72.dp)
+                                .clip(CircleShape)
+                                .background(if (key == "OK") cs.primary else cs.surfaceVariant.copy(alpha = 0.7f))
+                                .bounceClick {
+                                    when (key) {
+                                        "⌫" -> pin = pin.dropLast(1)
+                                        "OK" -> if (pin.length >= 4) onSubmit(pin) else onTooShort("Use at least 4 digits")
+                                        else -> {
+                                            val max = length ?: 12
+                                            if (pin.length < max) {
+                                                pin += key
+                                                if (length != null && pin.length == length) onSubmit(pin)
+                                            }
+                                        }
+                                    }
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                key,
+                                fontSize = if (key[0].isDigit()) 28.sp else 17.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (key == "OK") cs.onPrimary else cs.onBackground,
+                            )
+                        }
                     }
                 }
             }
@@ -228,7 +245,7 @@ private fun PasswordEntry(resetKey: Int, onSubmit: (String) -> Unit, onTooShort:
     }
 }
 
-/** Header (icon, title, message) in the free space above, input and footer anchored to the bottom for thumb reach. */
+/** Icon, title, message, input and footer stacked and centred. */
 @Composable
 private fun LockLayout(
     title: String,
@@ -240,39 +257,34 @@ private fun LockLayout(
 ) {
     val cs = MaterialTheme.colorScheme
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(bottom = 12.dp),
+        Modifier.fillMaxSize().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Column(
-            Modifier.weight(1f).fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+        Box(
+            Modifier.size(52.dp).clip(CircleShape).background(cs.surfaceVariant),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                Modifier.size(48.dp).clip(CircleShape).background(cs.surfaceVariant),
-                contentAlignment = Alignment.Center,
-            ) {
-                androidx.compose.material3.Icon(sleepless_index.haze.ui.theme.GIcons.Lock, null, tint = cs.primary, modifier = Modifier.size(22.dp))
-            }
-            Text(
-                title, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground,
-                textAlign = TextAlign.Center, modifier = Modifier.padding(top = 14.dp),
-            )
-            Text(
-                message ?: " ", fontSize = 13.sp, textAlign = TextAlign.Center,
-                color = if (message != null && messageIsError) cs.error else cs.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp),
-            )
+            androidx.compose.material3.Icon(sleepless_index.haze.ui.theme.GIcons.Lock, null, tint = cs.primary, modifier = Modifier.size(24.dp))
         }
+        Text(
+            title, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground,
+            textAlign = TextAlign.Center, modifier = Modifier.padding(top = 16.dp),
+        )
+        Text(
+            message ?: " ", fontSize = 14.sp, textAlign = TextAlign.Center,
+            color = if (message != null && messageIsError) cs.error else cs.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp, bottom = 20.dp),
+        )
         content()
         Text(
             footer,
-            fontSize = 13.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant,
+            fontSize = 14.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant,
             modifier = Modifier
-                .padding(top = 8.dp)
+                .padding(top = 14.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .bounceClick(onClick = onFooter)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 18.dp, vertical = 10.dp),
         )
     }
 }
@@ -294,14 +306,14 @@ fun LockSetup(title: String, onDone: (type: String, secret: String) -> Unit, onC
         onFooter = onCancel,
     ) {
         if (t == null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 4.dp)) {
                 listOf(VaultLockStore.PIN to "PIN", VaultLockStore.PATTERN to "Pattern", VaultLockStore.PASSWORD to "Password").forEach { (k, label) ->
                     sleepless_index.haze.editor.Chip(label, false) { type = k }
                 }
             }
         } else {
             SecretInput(
-                type = t, resetKey = key,
+                type = t, resetKey = key, pinLength = VaultLockStore.PIN_LENGTH,
                 onTooShort = { msg = it; key++ },
                 onSubmit = { s ->
                     val f = first
@@ -332,7 +344,7 @@ fun LockEntry(stored: String, onUnlock: () -> Unit, onBack: () -> Unit) {
         onFooter = onBack,
     ) {
         SecretInput(
-            type = type, resetKey = key,
+            type = type, resetKey = key, pinLength = VaultLockStore.pinLength(stored),
             onTooShort = { msg = it; key++ },
             onSubmit = { s ->
                 if (VaultLockStore.verify(stored, s)) onUnlock() else { msg = "Wrong ${typeName(type)}"; key++ }
@@ -341,8 +353,8 @@ fun LockEntry(stored: String, onUnlock: () -> Unit, onBack: () -> Unit) {
     }
 }
 
-/** Hides the password but leaves the first letter readable. */
+/** Hides the password except for the letter just typed. */
 private val FirstLetterMask = VisualTransformation { text ->
-    val masked = if (text.isEmpty()) "" else text.text.take(1) + "•".repeat(text.length - 1)
+    val masked = if (text.isEmpty()) "" else "•".repeat(text.length - 1) + text.text.last()
     TransformedText(AnnotatedString(masked), OffsetMapping.Identity)
 }

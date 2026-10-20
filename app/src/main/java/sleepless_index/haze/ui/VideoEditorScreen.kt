@@ -228,7 +228,7 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     }
     DisposableEffect(Unit) { onDispose { player.release() } }
 
-    var tool by remember { mutableStateOf(Tool.Trim) }
+    var tool by remember { mutableStateOf<Tool?>(null) }
     var durationMs by remember { mutableLongStateOf(item.durationMs.coerceAtLeast(1L)) }
     var startMs by remember { mutableLongStateOf(0L) }
     var endMs by remember { mutableLongStateOf(item.durationMs.coerceAtLeast(1L)) }
@@ -243,7 +243,6 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     var flip by remember { mutableStateOf(false) }
     var aspectIdx by remember { mutableIntStateOf(0) }
     var crop by remember { mutableStateOf(CropRect.Full) }
-    var started by remember { mutableStateOf(false) }
     var brightness by remember { mutableFloatStateOf(0f) }
     var contrast by remember { mutableFloatStateOf(0f) }
     var saturation by remember { mutableFloatStateOf(0f) }
@@ -403,20 +402,7 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
         }
     }
 
-    AnimatedContent(
-        targetState = started,
-        transitionSpec = { fadeIn(tween(320)) togetherWith fadeOut(tween(180)) },
-        label = "editorStart",
-    ) { isStarted ->
-    if (!isStarted) {
-        ToolPicker(
-            title = "Edit video",
-            item = item,
-            tools = listOf("Trim" to GIcons.Scissors, "Crop" to GIcons.Fit, "Adjust" to GIcons.Brightness, "Filters" to GIcons.Image),
-            onClose = onClose,
-            onPick = { tool = Tool.values()[it]; started = true },
-        )
-    } else Column(
+    Column(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
@@ -543,6 +529,9 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
             modifier = Modifier.fillMaxWidth().heightIn(min = 190.dp),
         ) { current ->
             when (current) {
+                null -> Box(Modifier.fillMaxWidth().heightIn(min = 190.dp), contentAlignment = Alignment.Center) {
+                    Text("Choose a tool to start editing", fontSize = 13.sp, color = cs.onSurfaceVariant)
+                }
                 Tool.Trim -> Column(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -655,7 +644,6 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                 }
             }
         }
-    }
     }
 
     if (exporting) {
