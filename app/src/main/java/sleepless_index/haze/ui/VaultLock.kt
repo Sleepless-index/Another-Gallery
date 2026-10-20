@@ -96,7 +96,7 @@ private fun PinPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (Strin
             repeat(maxOf(4, pin.length)) { i ->
                 Box(
                     Modifier
-                        .size(10.dp)
+                        .size(12.dp)
                         .clip(CircleShape)
                         .background(if (i < pin.length) cs.primary else cs.surfaceVariant)
                 )
@@ -104,11 +104,11 @@ private fun PinPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (Strin
         }
         val rows = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("⌫", "0", "OK"))
         rows.forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 row.forEach { key ->
                     Box(
                         Modifier
-                            .size(54.dp)
+                            .size(62.dp)
                             .clip(CircleShape)
                             .background(if (key == "OK") cs.primary else cs.surfaceVariant.copy(alpha = 0.7f))
                             .bounceClick {
@@ -122,7 +122,7 @@ private fun PinPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (Strin
                     ) {
                         Text(
                             key,
-                            fontSize = if (key[0].isDigit()) 20.sp else 14.sp,
+                            fontSize = if (key[0].isDigit()) 22.sp else 15.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = if (key == "OK") cs.onPrimary else cs.onBackground,
                         )
@@ -155,7 +155,7 @@ private fun PatternPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (S
 
     Canvas(
         Modifier
-            .size(210.dp)
+            .size(240.dp)
             .pointerInput(resetKey) {
                 detectDragGestures(
                     onDragStart = { o -> sizePx = size.width.toFloat(); path.clear(); finger = o; hit(o) },

@@ -292,13 +292,13 @@ fun NavPill(current: String?, onSelect: (String) -> Unit, modifier: Modifier = M
 }
 
 @Composable
-fun BottomFade(modifier: Modifier = Modifier, height: Dp = 150.dp) {
+fun BottomFade(modifier: Modifier = Modifier, height: Dp = 96.dp) {
     val bg = MaterialTheme.colorScheme.background
     Box(
         modifier
             .fillMaxWidth()
             .height(height)
-            .background(Brush.verticalGradient(listOf(Color.Transparent, bg.copy(alpha = 0.92f), bg)))
+            .background(Brush.verticalGradient(listOf(Color.Transparent, bg.copy(alpha = 0.45f), bg.copy(alpha = 0.78f))))
     )
 }
 

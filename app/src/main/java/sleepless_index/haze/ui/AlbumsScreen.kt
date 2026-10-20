@@ -281,13 +281,6 @@ fun AlbumsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            item(key = "smart_videos") {
-                StaggerIn(1) {
-                    SmartTile(GIcons.VideoAlbum, "Videos", "%,d".format(videos.size), cs.onBackground) {
-                        onOpenSmart("videos")
-                    }
-                }
-            }
             if (Build.VERSION.SDK_INT >= 30) {
                 item(key = "smart_trash") {
                     StaggerIn(2) {

@@ -90,7 +90,7 @@ private fun SelectionBarHost(
         exit = slideOutVertically(tween(220)) { it } + fadeOut(tween(160)),
     ) {
         Box {
-            BottomFade(Modifier.align(Alignment.BottomCenter), height = 140.dp)
+            BottomFade(Modifier.align(Alignment.BottomCenter), height = 90.dp)
             if (vault) {
                 VaultSelectionBar(vm, source, Modifier.align(Alignment.BottomCenter))
             } else {

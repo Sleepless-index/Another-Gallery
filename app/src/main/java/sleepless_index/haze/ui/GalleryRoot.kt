@@ -277,7 +277,7 @@ fun GalleryRoot(
             exit = slideOutVertically(tween(220)) { it } + fadeOut(tween(160)),
         ) {
             Box {
-                BottomFade(Modifier.align(Alignment.BottomCenter), height = 130.dp)
+                BottomFade(Modifier.align(Alignment.BottomCenter), height = 90.dp)
                 NavPill(
                     current = route,
                     onSelect = { target ->

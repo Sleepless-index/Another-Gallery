@@ -644,25 +644,10 @@ internal fun ToolPicker(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(androidx.compose.foundation.rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(18.dp),
+                .padding(vertical = 14.dp),
+            horizontalArrangement = Arrangement.Center,
         ) {
-            tools.forEachIndexed { i, (label, icon) ->
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.bounceClick(onClick = { onPick(i) }),
-                ) {
-                    Box(
-                        Modifier.size(64.dp).clip(CircleShape).background(cs.surfaceVariant),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(icon, null, tint = cs.onBackground, modifier = Modifier.size(26.dp))
-                    }
-                    Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurfaceVariant)
-                }
-            }
+            tools.forEachIndexed { i, (label, _) -> TabPill(label, false) { onPick(i) } }
         }
     }
 }
