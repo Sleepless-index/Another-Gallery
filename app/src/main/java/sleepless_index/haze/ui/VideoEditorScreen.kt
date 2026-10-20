@@ -403,7 +403,12 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
         }
     }
 
-    if (!started) {
+    AnimatedContent(
+        targetState = started,
+        transitionSpec = { fadeIn(tween(320)) togetherWith fadeOut(tween(180)) },
+        label = "editorStart",
+    ) { isStarted ->
+    if (!isStarted) {
         ToolPicker(
             title = "Edit video",
             item = item,
@@ -411,10 +416,7 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
             onClose = onClose,
             onPick = { tool = Tool.values()[it]; started = true },
         )
-        return
-    }
-
-    Column(
+    } else Column(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
@@ -653,6 +655,7 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                 }
             }
         }
+    }
     }
 
     if (exporting) {

@@ -400,7 +400,12 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
         }
     }
 
-    if (!started) {
+    AnimatedContent(
+        targetState = started,
+        transitionSpec = { fadeIn(tween(320)) togetherWith fadeOut(tween(180)) },
+        label = "editorStart",
+    ) { isStarted ->
+    if (!isStarted) {
         ToolPicker(
             title = "Edit photo",
             item = item,
@@ -408,10 +413,7 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
             onClose = onClose,
             onPick = { tab = it; started = true },
         )
-        return
-    }
-
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+    } else Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -598,6 +600,7 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
                 }
             }
         }
+    }
     }
 }
 

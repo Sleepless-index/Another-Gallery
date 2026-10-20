@@ -34,7 +34,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -91,12 +94,12 @@ fun SecretInput(type: String, resetKey: Int, onSubmit: (String) -> Unit, onTooSh
 private fun PinPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (String) -> Unit) {
     val cs = MaterialTheme.colorScheme
     var pin by remember(resetKey) { mutableStateOf("") }
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(Modifier.padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             repeat(maxOf(4, pin.length)) { i ->
                 Box(
                     Modifier
-                        .size(12.dp)
+                        .size(14.dp)
                         .clip(CircleShape)
                         .background(if (i < pin.length) cs.primary else cs.surfaceVariant)
                 )
@@ -104,11 +107,11 @@ private fun PinPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (Strin
         }
         val rows = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("⌫", "0", "OK"))
         rows.forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
                 row.forEach { key ->
                     Box(
                         Modifier
-                            .size(62.dp)
+                            .size(72.dp)
                             .clip(CircleShape)
                             .background(if (key == "OK") cs.primary else cs.surfaceVariant.copy(alpha = 0.7f))
                             .bounceClick {
@@ -122,7 +125,7 @@ private fun PinPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (Strin
                     ) {
                         Text(
                             key,
-                            fontSize = if (key[0].isDigit()) 22.sp else 15.sp,
+                            fontSize = if (key[0].isDigit()) 28.sp else 17.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = if (key == "OK") cs.onPrimary else cs.onBackground,
                         )
@@ -155,7 +158,7 @@ private fun PatternPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (S
 
     Canvas(
         Modifier
-            .size(240.dp)
+            .size(300.dp)
             .pointerInput(resetKey) {
                 detectDragGestures(
                     onDragStart = { o -> sizePx = size.width.toFloat(); path.clear(); finger = o; hit(o) },
@@ -175,16 +178,16 @@ private fun PatternPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (S
     ) {
         sizePx = size.width
         for (k in 1 until path.size) {
-            drawLine(line, center(path[k - 1]), center(path[k]), strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
+            drawLine(line, center(path[k - 1]), center(path[k]), strokeWidth = 5.dp.toPx(), cap = StrokeCap.Round)
         }
         val f = finger
         if (f != null && path.isNotEmpty()) {
-            drawLine(line, center(path.last()), f, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
+            drawLine(line, center(path.last()), f, strokeWidth = 5.dp.toPx(), cap = StrokeCap.Round)
         }
         for (i in 0 until 9) {
             val on = i in path
-            drawCircle(if (on) line else dot, radius = if (on) 8.dp.toPx() else 5.dp.toPx(), center = center(i))
-            if (on) drawCircle(line.copy(alpha = 0.25f), radius = 18.dp.toPx(), center = center(i), style = Stroke(2.dp.toPx()))
+            drawCircle(if (on) line else dot, radius = if (on) 10.dp.toPx() else 6.dp.toPx(), center = center(i))
+            if (on) drawCircle(line.copy(alpha = 0.25f), radius = 26.dp.toPx(), center = center(i), style = Stroke(2.dp.toPx()))
         }
     }
 }
@@ -193,26 +196,34 @@ private fun PatternPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (S
 private fun PasswordEntry(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (String) -> Unit) {
     val cs = MaterialTheme.colorScheme
     var text by remember(resetKey) { mutableStateOf("") }
+    var show by remember { mutableStateOf(false) }
     fun go() { if (text.length >= 4) onSubmit(text) else onTooShort("Use at least 4 characters") }
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
             singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
+            visualTransformation = if (show) VisualTransformation.None else FirstLetterMask,
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 18.sp),
+            trailingIcon = {
+                Text(
+                    if (show) "Hide" else "Show", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = cs.primary,
+                    modifier = Modifier.clip(RoundedCornerShape(12.dp)).bounceClick(onClick = { show = !show }).padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { go() }),
             shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth(0.8f),
+            modifier = Modifier.fillMaxWidth(),
         )
         Text(
             "Continue",
-            fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = cs.onPrimary,
+            fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = cs.onPrimary,
             modifier = Modifier
-                .clip(RoundedCornerShape(24.dp))
+                .clip(RoundedCornerShape(28.dp))
                 .background(cs.primary)
                 .bounceClick(onClick = { go() })
-                .padding(horizontal = 28.dp, vertical = 10.dp),
+                .padding(horizontal = 40.dp, vertical = 14.dp),
         )
     }
 }
@@ -328,4 +339,10 @@ fun LockEntry(stored: String, onUnlock: () -> Unit, onBack: () -> Unit) {
             },
         )
     }
+}
+
+/** Hides the password but leaves the first letter readable. */
+private val FirstLetterMask = VisualTransformation { text ->
+    val masked = if (text.isEmpty()) "" else text.text.take(1) + "•".repeat(text.length - 1)
+    TransformedText(AnnotatedString(masked), OffsetMapping.Identity)
 }

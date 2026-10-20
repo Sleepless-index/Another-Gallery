@@ -263,18 +263,15 @@ fun CollectionScreen(
             )
         }
         if (trash && !selectMode && items.isNotEmpty()) {
-            androidx.compose.material3.Text(
-                text = "Empty trash",
-                color = androidx.compose.material3.MaterialTheme.colorScheme.onError,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.ExtraBold,
+            GIconButton(
+                GIcons.Trash, "Empty trash",
+                onClick = { vm.emptyTrash() },
+                size = 56.dp,
+                container = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                tint = androidx.compose.material3.MaterialTheme.colorScheme.onError,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = navBottomInset() + 18.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(androidx.compose.material3.MaterialTheme.colorScheme.error)
-                    .bounceClick(onClick = { vm.emptyTrash() })
-                    .padding(horizontal = 26.dp, vertical = 13.dp),
+                    .padding(bottom = navBottomInset() + 18.dp),
             )
         }
         SelectionBarHost(selectMode, vm, items, trash = trash, modifier = Modifier.align(Alignment.BottomCenter), vault = vault)
