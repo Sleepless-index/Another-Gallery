@@ -232,6 +232,13 @@ object GIcons {
     val Fit: ImageVector by lazy {
         IconBuilder("Fit").s("M 4 9 V 5 h 4 M 20 9 V 5 h -4 M 4 15 v 4 h 4 M 20 15 v 4 h -4").build()
     }
+    val Lens: ImageVector by lazy {
+        IconBuilder("Lens")
+            .s("M 4 9 V 6 a 2 2 0 0 1 2 -2 h 3 M 15 4 h 3 a 2 2 0 0 1 2 2 v 3 M 20 15 v 3 a 2 2 0 0 1 -2 2 h -3 M 9 20 H 6 a 2 2 0 0 1 -2 -2 v -3")
+            .s(circle(11.5f, 11.5f, 3.3f))
+            .f(circle(17f, 17f, 1.4f))
+            .build()
+    }
     val Audio: ImageVector by lazy {
         IconBuilder("Audio").s("M 4 10 v 4 M 8 7 v 10 M 12 4 v 16 M 16 8 v 8 M 20 11 v 2").build()
     }

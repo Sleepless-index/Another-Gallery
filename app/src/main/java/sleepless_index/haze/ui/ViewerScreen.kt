@@ -258,16 +258,16 @@ fun ViewerScreen(
 
         AnimatedVisibility(
             visible = chrome && !current.isVideo && !inVault,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = bottomBarH + 8.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = bottomBarH + 6.dp),
             enter = fadeIn(tween(180)) + scaleIn(tween(200)),
             exit = fadeOut(tween(140)) + scaleOut(tween(160)),
         ) {
             GIconButton(
-                GIcons.Search, "Search this image",
+                GIcons.Lens, "Search this image",
                 onClick = { sleepless_index.haze.util.searchImage(context, current) },
-                size = 52.dp,
-                container = MaterialTheme.colorScheme.primary,
-                tint = MaterialTheme.colorScheme.onPrimary,
+                size = 40.dp,
+                container = Color(0xCC4A4A4E),
+                tint = Color.White,
             )
         }
 

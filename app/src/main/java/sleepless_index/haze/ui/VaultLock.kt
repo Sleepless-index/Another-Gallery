@@ -90,12 +90,12 @@ fun SecretInput(type: String, resetKey: Int, onSubmit: (String) -> Unit, onTooSh
 private fun PinPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (String) -> Unit) {
     val cs = MaterialTheme.colorScheme
     var pin by remember(resetKey) { mutableStateOf("") }
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Row(Modifier.padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             repeat(maxOf(4, pin.length)) { i ->
                 Box(
                     Modifier
-                        .size(14.dp)
+                        .size(10.dp)
                         .clip(CircleShape)
                         .background(if (i < pin.length) cs.primary else cs.surfaceVariant)
                 )
@@ -103,13 +103,13 @@ private fun PinPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (Strin
         }
         val rows = listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("⌫", "0", "OK"))
         rows.forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 row.forEach { key ->
                     Box(
                         Modifier
-                            .size(68.dp)
+                            .size(54.dp)
                             .clip(CircleShape)
-                            .background(if (key == "OK") cs.primary else cs.surfaceVariant)
+                            .background(if (key == "OK") cs.primary else cs.surfaceVariant.copy(alpha = 0.7f))
                             .bounceClick {
                                 when (key) {
                                     "⌫" -> pin = pin.dropLast(1)
@@ -121,7 +121,7 @@ private fun PinPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (Strin
                     ) {
                         Text(
                             key,
-                            fontSize = if (key[0].isDigit()) 24.sp else 18.sp,
+                            fontSize = if (key[0].isDigit()) 20.sp else 14.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = if (key == "OK") cs.onPrimary else cs.onBackground,
                         )
@@ -154,7 +154,7 @@ private fun PatternPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (S
 
     Canvas(
         Modifier
-            .size(260.dp)
+            .size(210.dp)
             .pointerInput(resetKey) {
                 detectDragGestures(
                     onDragStart = { o -> sizePx = size.width.toFloat(); path.clear(); finger = o; hit(o) },
@@ -174,16 +174,16 @@ private fun PatternPad(resetKey: Int, onSubmit: (String) -> Unit, onTooShort: (S
     ) {
         sizePx = size.width
         for (k in 1 until path.size) {
-            drawLine(line, center(path[k - 1]), center(path[k]), strokeWidth = 6.dp.toPx(), cap = StrokeCap.Round)
+            drawLine(line, center(path[k - 1]), center(path[k]), strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
         }
         val f = finger
         if (f != null && path.isNotEmpty()) {
-            drawLine(line, center(path.last()), f, strokeWidth = 6.dp.toPx(), cap = StrokeCap.Round)
+            drawLine(line, center(path.last()), f, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
         }
         for (i in 0 until 9) {
             val on = i in path
-            drawCircle(if (on) line else dot, radius = if (on) 11.dp.toPx() else 7.dp.toPx(), center = center(i))
-            if (on) drawCircle(line.copy(alpha = 0.25f), radius = 24.dp.toPx(), center = center(i), style = Stroke(2.dp.toPx()))
+            drawCircle(if (on) line else dot, radius = if (on) 8.dp.toPx() else 5.dp.toPx(), center = center(i))
+            if (on) drawCircle(line.copy(alpha = 0.25f), radius = 18.dp.toPx(), center = center(i), style = Stroke(2.dp.toPx()))
         }
     }
 }
@@ -202,16 +202,16 @@ private fun PasswordEntry(resetKey: Int, onSubmit: (String) -> Unit, onTooShort:
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { go() }),
             shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(0.8f),
         )
         Text(
             "Continue",
-            fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = cs.onPrimary,
+            fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = cs.onPrimary,
             modifier = Modifier
-                .clip(RoundedCornerShape(28.dp))
+                .clip(RoundedCornerShape(24.dp))
                 .background(cs.primary)
                 .bounceClick(onClick = { go() })
-                .padding(horizontal = 36.dp, vertical = 14.dp),
+                .padding(horizontal = 28.dp, vertical = 10.dp),
         )
     }
 }
@@ -228,28 +228,21 @@ fun LockSetup(title: String, onDone: (type: String, secret: String) -> Unit, onC
     Column(
         Modifier.fillMaxWidth().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         val t = type
         if (t == null) {
-            Text(title, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
+            Text(title, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
             Text("Choose how to lock the Vault", fontSize = 13.sp, color = cs.onSurfaceVariant)
-            listOf(VaultLockStore.PIN to "PIN", VaultLockStore.PATTERN to "Pattern", VaultLockStore.PASSWORD to "Password").forEach { (k, label) ->
-                Text(
-                    label,
-                    fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground, textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(cs.surfaceVariant)
-                        .bounceClick(onClick = { type = k })
-                        .padding(vertical = 16.dp),
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                listOf(VaultLockStore.PIN to "PIN", VaultLockStore.PATTERN to "Pattern", VaultLockStore.PASSWORD to "Password").forEach { (k, label) ->
+                    sleepless_index.haze.editor.Chip(label, false) { type = k }
+                }
             }
         } else {
             Text(
                 if (first == null) "Enter a new ${typeName(t)}" else "Confirm your ${typeName(t)}",
-                fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground,
+                fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground,
             )
             Text(msg ?: " ", fontSize = 13.sp, color = if (msg != null) cs.error else cs.onSurfaceVariant)
             SecretInput(
@@ -290,7 +283,7 @@ fun LockEntry(stored: String, onUnlock: () -> Unit, onBack: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text("Enter your ${typeName(type)}", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
+        Text("Enter your ${typeName(type)}", fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
         Text(msg ?: " ", fontSize = 13.sp, color = cs.error)
         SecretInput(
             type = type, resetKey = key,

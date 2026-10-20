@@ -281,13 +281,6 @@ fun AlbumsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            item(key = "smart_fav") {
-                StaggerIn(0) {
-                    SmartTile(GIcons.HeartFilled, "Favorites", "%,d".format(favorites.size), HeartRed) {
-                        onOpenSmart("favorites")
-                    }
-                }
-            }
             item(key = "smart_videos") {
                 StaggerIn(1) {
                     SmartTile(GIcons.VideoAlbum, "Videos", "%,d".format(videos.size), cs.onBackground) {
@@ -317,6 +310,18 @@ fun AlbumsScreen(
                     color = cs.onBackground,
                     modifier = Modifier.padding(start = 4.dp, top = 10.dp),
                 )
+            }
+            if (favorites.isNotEmpty()) {
+                item(key = "album_favorites") {
+                    StaggerIn(2) {
+                        AlbumTile(
+                            name = "Favorites",
+                            count = favorites.size,
+                            cover = favorites.first(),
+                            onClick = { onOpenSmart("favorites") },
+                        )
+                    }
+                }
             }
             if (allItems.isNotEmpty()) {
                 item(key = "album_recent") {

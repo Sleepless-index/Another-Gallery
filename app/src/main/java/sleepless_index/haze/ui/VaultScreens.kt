@@ -97,10 +97,10 @@ fun VaultScreen(
                 )
             } else {
                 Box(
-                    Modifier.size(72.dp).clip(CircleShape).background(cs.surfaceVariant),
+                    Modifier.size(48.dp).clip(CircleShape).background(cs.surfaceVariant),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(GIcons.Lock, null, tint = cs.primary, modifier = Modifier.size(32.dp))
+                    Icon(GIcons.Lock, null, tint = cs.primary, modifier = Modifier.size(22.dp))
                 }
                 LockEntry(stored = stored, onUnlock = { vm.unlockVault() }, onBack = onBack)
             }

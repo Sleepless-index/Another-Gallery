@@ -27,6 +27,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
+import coil.request.videoFrameMillis
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -400,6 +403,7 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     if (!started) {
         ToolPicker(
             title = "Edit photo",
+            item = item,
             tools = listOf("Crop" to GIcons.Fit, "Adjust" to GIcons.Brightness, "Filters" to GIcons.Image),
             onClose = onClose,
             onPick = { tab = it; started = true },
@@ -597,15 +601,17 @@ fun EditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     }
 }
 
-/** First screen of an editor: pick the tool to start with. */
+/** First screen of an editor: the media with a row of round tool buttons to start from. */
 @Composable
 internal fun ToolPicker(
     title: String,
+    item: sleepless_index.haze.data.MediaItem,
     tools: List<Pair<String, androidx.compose.ui.graphics.vector.ImageVector>>,
     onClose: () -> Unit,
     onPick: (Int) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val context = LocalContext.current
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -617,30 +623,44 @@ internal fun ToolPicker(
                 modifier = Modifier.padding(start = 14.dp),
             )
         }
-        Column(
-            modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.Center,
+        Box(
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Text("What do you want to do?", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
-            Text(
-                "You can switch tools any time.", fontSize = 13.sp, color = cs.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, bottom = 18.dp),
+            val request = remember(item.uri) {
+                coil.request.ImageRequest.Builder(context)
+                    .data(item.uri)
+                    .apply { if (item.isVideo) videoFrameMillis(0L) }
+                    .size(1600)
+                    .build()
+            }
+            coil.compose.AsyncImage(
+                model = request,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
             )
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                tools.forEachIndexed { i, (label, icon) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(cs.surfaceVariant)
-                            .bounceClick(onClick = { onPick(i) })
-                            .padding(horizontal = 18.dp, vertical = 18.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            tools.forEachIndexed { i, (label, icon) ->
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.bounceClick(onClick = { onPick(i) }),
+                ) {
+                    Box(
+                        Modifier.size(64.dp).clip(CircleShape).background(cs.surfaceVariant),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Icon(icon, null, tint = cs.primary, modifier = Modifier.size(24.dp))
-                        Text(label, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
+                        Icon(icon, null, tint = cs.onBackground, modifier = Modifier.size(26.dp))
                     }
+                    Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurfaceVariant)
                 }
             }
         }

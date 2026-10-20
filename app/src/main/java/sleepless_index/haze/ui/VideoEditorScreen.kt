@@ -406,6 +406,7 @@ fun VideoEditorScreen(vm: GalleryViewModel, itemId: Long, onClose: () -> Unit) {
     if (!started) {
         ToolPicker(
             title = "Edit video",
+            item = item,
             tools = listOf("Trim" to GIcons.Scissors, "Crop" to GIcons.Fit, "Adjust" to GIcons.Brightness, "Filters" to GIcons.Image),
             onClose = onClose,
             onPick = { tool = Tool.values()[it]; started = true },
