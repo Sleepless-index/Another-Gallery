@@ -236,20 +236,6 @@ fun CollectionScreen(
                         },
                         trailing = {
                             trailingExtra()
-                            if (trash && items.isNotEmpty()) {
-                                androidx.compose.material3.Text(
-                                    text = "Empty",
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant)
-                                        .bounceClick(onClick = { vm.emptyTrash() })
-                                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                                )
-                                Box(Modifier.size(8.dp))
-                            }
                             GIconButton(GIcons.CheckSquare, "Select items", onClick = { vm.startSelect() }, flat = true)
                         },
                     )
@@ -274,6 +260,21 @@ fun CollectionScreen(
                 bottomPad = BottomBarSpace + navBottomInset(),
                 modifier = Modifier.weight(1f),
                 emptyText = if (trash) "Trash is empty" else if (vault) "Your Vault is empty" else "Nothing here yet",
+            )
+        }
+        if (trash && !selectMode && items.isNotEmpty()) {
+            androidx.compose.material3.Text(
+                text = "Empty trash",
+                color = androidx.compose.material3.MaterialTheme.colorScheme.onError,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = navBottomInset() + 18.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(androidx.compose.material3.MaterialTheme.colorScheme.error)
+                    .bounceClick(onClick = { vm.emptyTrash() })
+                    .padding(horizontal = 26.dp, vertical = 13.dp),
             )
         }
         SelectionBarHost(selectMode, vm, items, trash = trash, modifier = Modifier.align(Alignment.BottomCenter), vault = vault)

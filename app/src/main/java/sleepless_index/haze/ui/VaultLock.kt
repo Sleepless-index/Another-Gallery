@@ -216,35 +216,78 @@ private fun PasswordEntry(resetKey: Int, onSubmit: (String) -> Unit, onTooShort:
     }
 }
 
+/** Header (icon, title, message) in the free space above, input and footer anchored to the bottom for thumb reach. */
+@Composable
+private fun LockLayout(
+    title: String,
+    message: String?,
+    messageIsError: Boolean,
+    footer: String,
+    onFooter: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(bottom = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Column(
+            Modifier.weight(1f).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(
+                Modifier.size(48.dp).clip(CircleShape).background(cs.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                androidx.compose.material3.Icon(sleepless_index.haze.ui.theme.GIcons.Lock, null, tint = cs.primary, modifier = Modifier.size(22.dp))
+            }
+            Text(
+                title, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground,
+                textAlign = TextAlign.Center, modifier = Modifier.padding(top = 14.dp),
+            )
+            Text(
+                message ?: " ", fontSize = 13.sp, textAlign = TextAlign.Center,
+                color = if (message != null && messageIsError) cs.error else cs.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+        content()
+        Text(
+            footer,
+            fontSize = 13.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant,
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .bounceClick(onClick = onFooter)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+        )
+    }
+}
+
 /** Pick a lock type, enter it, confirm it. */
 @Composable
 fun LockSetup(title: String, onDone: (type: String, secret: String) -> Unit, onCancel: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
     var type by remember { mutableStateOf<String?>(null) }
     var first by remember { mutableStateOf<String?>(null) }
     var msg by remember { mutableStateOf<String?>(null) }
     var key by remember { mutableStateOf(0) }
+    val t = type
 
-    Column(
-        Modifier.fillMaxWidth().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+    LockLayout(
+        title = if (t == null) title else if (first == null) "Enter a new ${typeName(t)}" else "Confirm your ${typeName(t)}",
+        message = if (t == null) "Choose how to lock the Vault" else msg,
+        messageIsError = t != null,
+        footer = "Cancel",
+        onFooter = onCancel,
     ) {
-        val t = type
         if (t == null) {
-            Text(title, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
-            Text("Choose how to lock the Vault", fontSize = 13.sp, color = cs.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
                 listOf(VaultLockStore.PIN to "PIN", VaultLockStore.PATTERN to "Pattern", VaultLockStore.PASSWORD to "Password").forEach { (k, label) ->
                     sleepless_index.haze.editor.Chip(label, false) { type = k }
                 }
             }
         } else {
-            Text(
-                if (first == null) "Enter a new ${typeName(t)}" else "Confirm your ${typeName(t)}",
-                fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground,
-            )
-            Text(msg ?: " ", fontSize = 13.sp, color = if (msg != null) cs.error else cs.onSurfaceVariant)
             SecretInput(
                 type = t, resetKey = key,
                 onTooShort = { msg = it; key++ },
@@ -260,45 +303,28 @@ fun LockSetup(title: String, onDone: (type: String, secret: String) -> Unit, onC
                 },
             )
         }
-        Text(
-            "Cancel",
-            fontSize = 13.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant,
-            modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
-                .bounceClick(onClick = onCancel)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-        )
     }
 }
 
 /** Asks for the saved lock. */
 @Composable
 fun LockEntry(stored: String, onUnlock: () -> Unit, onBack: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
     val type = VaultLockStore.typeOf(stored) ?: VaultLockStore.PIN
     var msg by remember { mutableStateOf<String?>(null) }
     var key by remember { mutableStateOf(0) }
-    Column(
-        Modifier.fillMaxWidth().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+    LockLayout(
+        title = "Enter your ${typeName(type)}",
+        message = msg,
+        messageIsError = true,
+        footer = "Back",
+        onFooter = onBack,
     ) {
-        Text("Enter your ${typeName(type)}", fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = cs.onBackground)
-        Text(msg ?: " ", fontSize = 13.sp, color = cs.error)
         SecretInput(
             type = type, resetKey = key,
             onTooShort = { msg = it; key++ },
             onSubmit = { s ->
                 if (VaultLockStore.verify(stored, s)) onUnlock() else { msg = "Wrong ${typeName(type)}"; key++ }
             },
-        )
-        Text(
-            "Back",
-            fontSize = 13.sp, fontWeight = FontWeight.Bold, color = cs.onSurfaceVariant,
-            modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
-                .bounceClick(onClick = onBack)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
         )
     }
 }

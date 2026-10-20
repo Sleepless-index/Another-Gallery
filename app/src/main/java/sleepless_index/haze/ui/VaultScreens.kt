@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
@@ -80,11 +82,7 @@ fun VaultScreen(
             },
         )
     } else {
-        Column(
-            Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
+        Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
             if (stored.isEmpty() || changing) {
                 LockSetup(
                     title = if (changing) "Change Vault lock" else "Set a Vault lock",
@@ -96,12 +94,6 @@ fun VaultScreen(
                     onCancel = { if (changing) changing = false else onBack() },
                 )
             } else {
-                Box(
-                    Modifier.size(48.dp).clip(CircleShape).background(cs.surfaceVariant),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(GIcons.Lock, null, tint = cs.primary, modifier = Modifier.size(22.dp))
-                }
                 LockEntry(stored = stored, onUnlock = { vm.unlockVault() }, onBack = onBack)
             }
         }
