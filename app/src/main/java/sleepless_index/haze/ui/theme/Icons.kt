@@ -200,6 +200,9 @@ object GIcons {
     val Pin: ImageVector by lazy {
         IconBuilder("Pin").s("M 9 4 h 6 l -1 5 l 3 3 H 7 l 3 -3 z M 12 12 v 8").build()
     }
+    val Eye: ImageVector by lazy {
+        IconBuilder("Eye").s("M 2 12 s 3.5 -7 10 -7 s 10 7 10 7 s -3.5 7 -10 7 s -10 -7 -10 -7 z").s(circle(12f, 12f, 3f)).build()
+    }
     val EyeOff: ImageVector by lazy {
         IconBuilder("EyeOff").s("M 3 12 s 3.5 -6 9 -6 s 9 6 9 6 s -3.5 6 -9 6 s -9 -6 -9 -6 z")
             .s(circle(12f, 12f, 2.6f)).s("M 4 4 L 20 20").build()

@@ -223,10 +223,17 @@ private fun PasswordEntry(resetKey: Int, onSubmit: (String) -> Unit, onTooShort:
             visualTransformation = if (show) VisualTransformation.None else FirstLetterMask,
             textStyle = androidx.compose.ui.text.TextStyle(fontSize = 18.sp),
             trailingIcon = {
-                Text(
-                    if (show) "Hide" else "Show", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = cs.primary,
-                    modifier = Modifier.clip(RoundedCornerShape(12.dp)).bounceClick(onClick = { show = !show }).padding(horizontal = 12.dp, vertical = 8.dp),
-                )
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).bounceClick(onClick = { show = !show }),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.Icon(
+                        if (show) sleepless_index.haze.ui.theme.GIcons.EyeOff else sleepless_index.haze.ui.theme.GIcons.Eye,
+                        contentDescription = if (show) "Hide password" else "Show password",
+                        tint = cs.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { go() }),

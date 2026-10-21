@@ -212,6 +212,7 @@ private fun subtitleConfig(uri: android.net.Uri, name: String): ExoMediaItem.Sub
     return ExoMediaItem.SubtitleConfiguration.Builder(uri)
         .setMimeType(mime)
         .setLanguage("und")
+        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
         .setLabel(name.substringBeforeLast('.').ifBlank { "Subtitles" })
         .build()
 }
@@ -378,7 +379,10 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                 player.seekTo(idx, pos)
                 player.playWhenReady = was
                 player.trackSelectionParameters = player.trackSelectionParameters
-                    .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setSelectUndeterminedTextLanguage(true)
+                    .build()
             }
         }
     }
