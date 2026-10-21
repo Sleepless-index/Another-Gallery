@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -260,6 +261,7 @@ private fun LockLayout(
     messageIsError: Boolean,
     footer: String,
     onFooter: () -> Unit,
+    lowered: Boolean,
     content: @Composable () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -268,6 +270,7 @@ private fun LockLayout(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
+        if (lowered) Spacer(Modifier.weight(1.5f))
         Box(
             Modifier.size(52.dp).clip(CircleShape).background(cs.surfaceVariant),
             contentAlignment = Alignment.Center,
@@ -293,6 +296,7 @@ private fun LockLayout(
                 .bounceClick(onClick = onFooter)
                 .padding(horizontal = 18.dp, vertical = 10.dp),
         )
+        if (lowered) Spacer(Modifier.weight(1f))
     }
 }
 
@@ -311,6 +315,7 @@ fun LockSetup(title: String, onDone: (type: String, secret: String) -> Unit, onC
         messageIsError = t != null,
         footer = "Cancel",
         onFooter = onCancel,
+        lowered = t == VaultLockStore.PIN || t == VaultLockStore.PATTERN,
     ) {
         if (t == null) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 4.dp)) {
@@ -349,6 +354,7 @@ fun LockEntry(stored: String, onUnlock: () -> Unit, onBack: () -> Unit) {
         messageIsError = true,
         footer = "Back",
         onFooter = onBack,
+        lowered = type != VaultLockStore.PASSWORD,
     ) {
         SecretInput(
             type = type, resetKey = key, pinLength = VaultLockStore.pinLength(stored),
