@@ -266,11 +266,11 @@ private fun LockLayout(
 ) {
     val cs = MaterialTheme.colorScheme
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 24.dp),
+        Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(bottom = if (lowered) 16.dp else 0.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        if (lowered) Spacer(Modifier.weight(1.5f))
+        if (lowered) Spacer(Modifier.weight(1f))
         Box(
             Modifier.size(52.dp).clip(CircleShape).background(cs.surfaceVariant),
             contentAlignment = Alignment.Center,
@@ -296,7 +296,6 @@ private fun LockLayout(
                 .bounceClick(onClick = onFooter)
                 .padding(horizontal = 18.dp, vertical = 10.dp),
         )
-        if (lowered) Spacer(Modifier.weight(1f))
     }
 }
 

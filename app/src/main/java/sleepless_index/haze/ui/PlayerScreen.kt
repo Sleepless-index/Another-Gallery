@@ -118,7 +118,10 @@ import androidx.media3.ui.PlayerView
 import sleepless_index.haze.data.formatDuration
 import sleepless_index.haze.ui.theme.GIcons
 import sleepless_index.haze.util.findActivity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.mutableStateMapOf
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.abs
@@ -199,6 +202,44 @@ private fun SkipButton(
             modifier = Modifier.size(iconSize),
         )
     }
+}
+
+/** A subtitle line we draw ourselves (SRT / VTT), so it shows no matter what the player decides. */
+private class SubCue(val start: Long, val end: Long, val text: String)
+
+private val SubTimeRe = Regex("""(?:(\d+):)?(\d{1,2}):(\d{2})[,.](\d{1,3})""")
+
+private fun subTime(m: MatchResult): Long {
+    val h = m.groupValues[1].toLongOrNull() ?: 0L
+    val mi = m.groupValues[2].toLong()
+    val sec = m.groupValues[3].toLong()
+    val ms = m.groupValues[4].padEnd(3, '0').toLong()
+    return ((h * 60 + mi) * 60 + sec) * 1000 + ms
+}
+
+private fun parseSubtitles(raw: String): List<SubCue> {
+    val text = raw.replace("\r\n", "\n").replace('\r', '\n')
+    val out = ArrayList<SubCue>()
+    for (block in text.split(Regex("\n\\s*\n"))) {
+        val lines = block.trim().split("\n")
+        val ti = lines.indexOfFirst { "-->" in it }
+        if (ti < 0) continue
+        val times = SubTimeRe.findAll(lines[ti]).toList()
+        if (times.size < 2) continue
+        val start = subTime(times[0])
+        val end = subTime(times[1])
+        val body = lines.drop(ti + 1).joinToString("\n")
+            .replace(Regex("<[^>]+>"), "")
+            .replace(Regex("\\{\\\\[^}]*\\}"), "")
+            .trim()
+        if (body.isNotEmpty() && end > start) out.add(SubCue(start, end, body))
+    }
+    return out.sortedBy { it.start }
+}
+
+private fun decodeSubtitleBytes(raw: ByteArray): String {
+    val utf8 = String(raw, Charsets.UTF_8).removePrefix("\uFEFF")
+    return if ('\uFFFD' in utf8) String(raw, charset("windows-1252")) else utf8
 }
 
 private fun subtitleConfig(uri: android.net.Uri, name: String): ExoMediaItem.SubtitleConfiguration {
@@ -334,6 +375,9 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
 
     // Subtitle files loaded by the user (or found next to the video), per video.
     val subsById = remember { mutableMapOf<Long, List<ExoMediaItem.SubtitleConfiguration>>() }
+    val customSubs = remember { mutableStateMapOf<Long, List<SubCue>>() }
+    val customNames = remember { mutableStateMapOf<Long, String>() }
+    var customOn by remember { mutableStateOf(true) }
 
     val player = remember {
         val factory = DefaultRenderersFactory(context).setEnableDecoderFallback(true)
@@ -371,18 +415,37 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
             val cur = queue.getOrNull(idx)
             if (cur != null) {
                 val name = uri.lastPathSegment?.substringAfterLast('/') ?: "Subtitles"
-                val list = (subsById[cur.id] ?: emptyList()).filter { it.uri != uri } + subtitleConfig(uri, name)
-                subsById[cur.id] = list
-                val pos = player.currentPosition
-                val was = player.playWhenReady
-                player.replaceMediaItem(idx, exoItemFor(cur, list))
-                player.seekTo(idx, pos)
-                player.playWhenReady = was
-                player.trackSelectionParameters = player.trackSelectionParameters
-                    .buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                    .setSelectUndeterminedTextLanguage(true)
-                    .build()
+                scope.launch {
+                    // SRT / VTT are parsed and drawn by the app itself.
+                    val cues = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val raw = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            if (raw == null) emptyList() else parseSubtitles(decodeSubtitleBytes(raw))
+                        }.getOrDefault(emptyList())
+                    }
+                    if (cues.isNotEmpty()) {
+                        customSubs[cur.id] = cues
+                        customNames[cur.id] = name.substringBeforeLast('.').ifBlank { "Subtitles" }
+                        customOn = true
+                        player.trackSelectionParameters = player.trackSelectionParameters
+                            .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+                    } else {
+                        // Other formats (ASS, TTML...) go through the player.
+                        val list = (subsById[cur.id] ?: emptyList()).filter { it.uri != uri } + subtitleConfig(uri, name)
+                        subsById[cur.id] = list
+                        val pos = player.currentPosition
+                        val was = player.playWhenReady
+                        player.replaceMediaItem(idx, exoItemFor(cur, list))
+                        player.seekTo(idx, pos)
+                        player.playWhenReady = was
+                        customOn = false
+                        player.trackSelectionParameters = player.trackSelectionParameters
+                            .buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                            .setSelectUndeterminedTextLanguage(true)
+                            .build()
+                    }
+                }
             }
         }
     }
@@ -743,6 +806,34 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
             )
         }
 
+        // Subtitles loaded from a file
+        val loadedCues = customSubs[item.id]
+        if (loadedCues != null && customOn) {
+            val now = position
+            val active = loadedCues.filter { now >= it.start && now < it.end }
+            if (active.isNotEmpty()) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 32.dp)
+                        .padding(bottom = if (controls && !locked && !inPip) 130.dp else 36.dp),
+                    contentAlignment = Alignment.BottomCenter,
+                ) {
+                    Text(
+                        text = active.joinToString("\n") { it.text },
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x99000000))
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+            }
+        }
+
         // gesture layer
         Box(
             Modifier
@@ -1095,6 +1186,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                     text = { Text("Off") },
                                     onClick = {
                                         subsMenu = false
+                                        customOn = false
                                         player.trackSelectionParameters = player.trackSelectionParameters
                                             .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
                                     },
@@ -1104,6 +1196,7 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                         text = { Text(trackLabel(g, i, "Subtitle")) },
                                         onClick = {
                                             subsMenu = false
+                                            customOn = false
                                             player.trackSelectionParameters = player.trackSelectionParameters
                                                 .buildUpon()
                                                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
@@ -1112,7 +1205,18 @@ fun PlayerScreen(vm: GalleryViewModel, itemId: Long, onBack: () -> Unit, onOpenV
                                         },
                                     )
                                 }
-                                if (textGroups.isEmpty()) {
+                                customNames[item.id]?.let { nm ->
+                                    CompactMenuItem(
+                                        text = { Text(nm) },
+                                        onClick = {
+                                            subsMenu = false
+                                            customOn = true
+                                            player.trackSelectionParameters = player.trackSelectionParameters
+                                                .buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+                                        },
+                                    )
+                                }
+                                if (textGroups.isEmpty() && customNames[item.id] == null) {
                                     CompactMenuItem(text = { Text("No subtitles in this file") }, enabled = false, onClick = {})
                                 }
                                 CompactMenuItem(
