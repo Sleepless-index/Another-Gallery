@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -269,7 +270,8 @@ fun PillItem(
                 fontSize = 11.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
                 color = labelColor,
-                modifier = Modifier.padding(top = 1.dp),
+                lineHeight = 12.sp,
+                modifier = Modifier.offset(y = (-2).dp),
             )
         }
     }

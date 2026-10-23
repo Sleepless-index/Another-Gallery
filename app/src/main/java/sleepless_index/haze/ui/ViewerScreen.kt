@@ -98,6 +98,7 @@ import sleepless_index.haze.data.formatSize
 import sleepless_index.haze.ui.theme.GIcons
 import sleepless_index.haze.util.shareItems
 import kotlinx.coroutines.Dispatchers
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
@@ -142,7 +143,7 @@ fun ViewerScreen(
 
     val topBarH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 64.dp
     val bottomBarH = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 14.dp + 56.dp + 10.dp +
-        (if (list.size > 1) 56.dp else 0.dp)
+        (if (list.size > 1) 60.dp else 0.dp)
     val insetTop by animateDpAsState(if (chrome) topBarH else 0.dp, tween(220), label = "insetTop")
     val insetBottom by animateDpAsState(if (chrome) bottomBarH else 0.dp, tween(220), label = "insetBottom")
 
@@ -641,33 +642,43 @@ private fun AmbientBackdrop(item: MediaItem) {
 }
 
 
-/** Thumbnail strip under the photo: the current one is highlighted, tap another to jump to it. */
+/** Thumbnail strip under the photo. It scrolls in step with the pager; a fixed underline marks the current one. */
 @Composable
 private fun FilmStrip(list: List<MediaItem>, pagerState: androidx.compose.foundation.pager.PagerState) {
     val ctx = LocalContext.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    val page = pagerState.currentPage
-    val sidePad = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp - 32.dp) / 2 - 22.dp
-    androidx.compose.runtime.LaunchedEffect(page) { listState.animateScrollToItem(page.coerceIn(0, list.lastIndex)) }
+    val itemW = 36.dp
+    val gap = 4.dp
+    val stride = with(density) { (itemW + gap).toPx() }
+    val sidePad = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp - 40.dp) / 2 - itemW / 2
+
+    // Follow the pager continuously, so dragging a photo slides the strip with it.
+    androidx.compose.runtime.LaunchedEffect(pagerState, list.size) {
+        androidx.compose.runtime.snapshotFlow { pagerState.currentPage to pagerState.currentPageOffsetFraction }
+            .collect { (p, f) ->
+                listState.scrollToItem(p.coerceIn(0, list.lastIndex), (f * stride).roundToInt())
+            }
+    }
+
     Box(
         Modifier
             .padding(start = 20.dp, end = 20.dp, bottom = 8.dp)
             .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(24.dp))
+            .height(52.dp)
+            .clip(RoundedCornerShape(26.dp))
             .background(Color(0xCC141414)),
     ) {
         androidx.compose.foundation.lazy.LazyRow(
             state = listState,
+            userScrollEnabled = false,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = sidePad.coerceAtLeast(0.dp)),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(gap),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(bottom = 6.dp),
         ) {
             itemsIndexed(list) { i, it ->
-                val cur = i == page
-                val w by animateDpAsState(if (cur) 44.dp else 34.dp, tween(200), label = "stripW")
                 val req = remember(it.uri) {
                     coil.request.ImageRequest.Builder(ctx)
                         .data(it.uri)
@@ -680,17 +691,31 @@ private fun FilmStrip(list: List<MediaItem>, pagerState: androidx.compose.founda
                     contentDescription = null,
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     modifier = Modifier
-                        .width(w)
-                        .height(38.dp)
+                        .width(itemW)
+                        .height(36.dp)
+                        .graphicsLayer {
+                            val pos = pagerState.currentPage + pagerState.currentPageOffsetFraction
+                            val near = 1f - kotlin.math.min(1f, kotlin.math.abs(i - pos))
+                            alpha = 0.55f + 0.45f * near
+                            val sc = 0.94f + 0.06f * near
+                            scaleX = sc
+                            scaleY = sc
+                        }
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color(0xFF2A2A2A))
-                        .then(
-                            if (cur) Modifier.border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), RoundedCornerShape(8.dp))
-                            else Modifier.alpha(0.6f)
-                        )
                         .clickable { scope.launch { pagerState.animateScrollToPage(i) } },
                 )
             }
         }
+        // Underline for the current photo (the strip scrolls underneath it)
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 5.dp)
+                .width(itemW)
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.primary),
+        )
     }
 }
