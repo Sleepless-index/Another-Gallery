@@ -40,6 +40,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.alpha
@@ -663,7 +665,7 @@ private fun FilmStrip(list: List<MediaItem>, pagerState: androidx.compose.founda
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxSize(),
         ) {
-            androidx.compose.foundation.lazy.itemsIndexed(list) { i, it ->
+            itemsIndexed(list) { i, it ->
                 val cur = i == page
                 val w by animateDpAsState(if (cur) 44.dp else 34.dp, tween(200), label = "stripW")
                 val req = remember(it.uri) {
