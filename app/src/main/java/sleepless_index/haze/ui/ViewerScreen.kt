@@ -69,6 +69,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -141,6 +142,15 @@ fun ViewerScreen(
     val blurOn = vm.prefs.collectAsStateWithLifecycle().value.blur
     val blurDp by animateDpAsState(if (showInfo && blurOn) 28.dp else 0.dp, tween(260), label = "infoBlur")
     Box(Modifier.fillMaxSize().background(Color.Black).blur(blurDp)) {
+        // One backdrop for the current item, behind the pager, so neighbouring pages' blur can't leak in.
+        if (blurOn) {
+            androidx.compose.animation.Crossfade(
+                targetState = current,
+                animationSpec = tween(250),
+                label = "ambientBackdrop",
+                modifier = Modifier.fillMaxSize().clipToBounds(),
+            ) { AmbientBackdrop(it) }
+        }
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
@@ -150,7 +160,6 @@ fun ViewerScreen(
         ) { page ->
             val item = list[page]
             Box(Modifier.fillMaxSize()) {
-            if (blurOn) AmbientBackdrop(item)
             if (item.isVideo) {
                 VideoPage(
                     item = item,
