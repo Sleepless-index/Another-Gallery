@@ -39,6 +39,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -135,7 +139,8 @@ fun ViewerScreen(
     val zoned = Instant.ofEpochMilli(current.dateMs).atZone(ZoneId.systemDefault())
 
     val topBarH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 64.dp
-    val bottomBarH = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 18.dp + 64.dp + 12.dp
+    val bottomBarH = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 14.dp + 56.dp + 10.dp +
+        (if (list.size > 1) 56.dp else 0.dp)
     val insetTop by animateDpAsState(if (chrome) topBarH else 0.dp, tween(220), label = "insetTop")
     val insetBottom by animateDpAsState(if (chrome) bottomBarH else 0.dp, tween(220), label = "insetBottom")
 
@@ -287,6 +292,7 @@ fun ViewerScreen(
             exit = fadeOut(tween(140)) + slideOutVertically(tween(180)) { it / 2 },
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (list.size > 1) FilmStrip(list, pagerState)
                 if (inVault) {
                     PillBar {
                         PillItem(
@@ -629,5 +635,60 @@ private fun AmbientBackdrop(item: MediaItem) {
             modifier = Modifier.fillMaxSize().blur(64.dp, androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded),
         )
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
+    }
+}
+
+
+/** Thumbnail strip under the photo: the current one is highlighted, tap another to jump to it. */
+@Composable
+private fun FilmStrip(list: List<MediaItem>, pagerState: androidx.compose.foundation.pager.PagerState) {
+    val ctx = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val page = pagerState.currentPage
+    val sidePad = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp - 32.dp) / 2 - 22.dp
+    androidx.compose.runtime.LaunchedEffect(page) { listState.animateScrollToItem(page.coerceIn(0, list.lastIndex)) }
+    Box(
+        Modifier
+            .padding(start = 20.dp, end = 20.dp, bottom = 8.dp)
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xCC141414)),
+    ) {
+        androidx.compose.foundation.lazy.LazyRow(
+            state = listState,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = sidePad.coerceAtLeast(0.dp)),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            androidx.compose.foundation.lazy.itemsIndexed(list) { i, it ->
+                val cur = i == page
+                val w by animateDpAsState(if (cur) 44.dp else 34.dp, tween(200), label = "stripW")
+                val req = remember(it.uri) {
+                    coil.request.ImageRequest.Builder(ctx)
+                        .data(it.uri)
+                        .size(96)
+                        .apply { if (it.isVideo) setParameter("thumb", true) }
+                        .build()
+                }
+                coil.compose.AsyncImage(
+                    model = req,
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier
+                        .width(w)
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF2A2A2A))
+                        .then(
+                            if (cur) Modifier.border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), RoundedCornerShape(8.dp))
+                            else Modifier.alpha(0.6f)
+                        )
+                        .clickable { scope.launch { pagerState.animateScrollToPage(i) } },
+                )
+            }
+        }
     }
 }

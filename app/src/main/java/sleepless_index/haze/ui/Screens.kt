@@ -68,7 +68,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
-private val BottomBarSpace = 100.dp
+private val BottomBarSpace = 88.dp
 
 @Composable
 private fun navBottomInset() = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()

@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -196,16 +198,16 @@ fun SelectionHeader(
 /** Floating rounded pill used for the tab bar and the selection action bar. */
 @Composable
 fun PillBar(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
-    val shape = RoundedCornerShape(32.dp)
+    val shape = RoundedCornerShape(28.dp)
     Box(
         modifier = modifier
             .navigationBarsPadding()
-            .padding(start = 16.dp, end = 16.dp, bottom = 18.dp)
+            .padding(start = 20.dp, end = 20.dp, bottom = 14.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp)
+                .height(56.dp)
                 .clip(shape)
                 .background(MaterialTheme.colorScheme.surface)
                 .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline), shape),
@@ -233,22 +235,26 @@ fun PillItem(
     )
     val glow by animateFloatAsState(if (selected) 0.16f else 0f, tween(260), label = "pillGlow")
     val lift by animateFloatAsState(
-        targetValue = if (selected) 1.12f else 1f,
+        targetValue = if (selected) 1.08f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
         label = "pillLift",
     )
-    Column(
+    Box(
         modifier = modifier
-            .height(64.dp)
+            .height(56.dp)
+            .padding(horizontal = 3.dp, vertical = 6.dp)
             .bounceClick(role = Role.Tab, onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
+        Column(
             modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
-                .background(cs.primary.copy(alpha = glow))
-                .padding(horizontal = 14.dp, vertical = 3.dp),
+                .fillMaxHeight()
+                .widthIn(max = 88.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .background(cs.primary.copy(alpha = glow)),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
             Icon(
                 imageVector = icon,
@@ -258,13 +264,14 @@ fun PillItem(
                     .size(22.dp)
                     .scale(lift),
             )
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                color = labelColor,
+                modifier = Modifier.padding(top = 1.dp),
+            )
         }
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
-            color = labelColor,
-        )
     }
 }
 
