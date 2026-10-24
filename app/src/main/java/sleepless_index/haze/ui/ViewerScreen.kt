@@ -82,6 +82,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.unit.IntOffset
@@ -235,14 +236,14 @@ fun ViewerScreen(
                         if (!inVault) {
                             if (!current.isVideo) {
                                 CompactMenuItem(
-                                    text = { Text("Set as…") },
+                                    text = { Text("Set as wallpaper or contact photo") },
                                     onClick = {
                                         menu = false
                                         setAs(context, current)
                                     },
                                 )
                                 CompactMenuItem(
-                                    text = { Text("Print") },
+                                    text = { Text("Print photo") },
                                     onClick = {
                                         menu = false
                                         printImage(context, current)
@@ -250,21 +251,21 @@ fun ViewerScreen(
                                 )
                             }
                             CompactMenuItem(
-                                text = { Text("Copy…") },
+                                text = { Text("Copy to album") },
                                 onClick = {
                                     menu = false
                                     picker = false
                                 },
                             )
                             CompactMenuItem(
-                                text = { Text("Move…") },
+                                text = { Text("Move to album") },
                                 onClick = {
                                     menu = false
                                     picker = true
                                 },
                             )
                             CompactMenuItem(
-                                text = { Text("Hide") },
+                                text = { Text("Move to Vault") },
                                 onClick = {
                                     menu = false
                                     vm.moveToVault(listOf(current))
@@ -669,7 +670,21 @@ private fun FilmStrip(list: List<MediaItem>, pagerState: androidx.compose.founda
     fun extra(k: Int): Float = if (k in aspects.indices) bigW(k) + 2f * marginPx - baseWpx else 0f
 
     Box(
-        Modifier.padding(bottom = 8.dp).fillMaxWidth().height(80.dp),
+        Modifier
+            .padding(bottom = 8.dp)
+            .fillMaxWidth()
+            .height(80.dp)
+            // Drag the strip to scrub through photos; it settles on the nearest one when released.
+            .pointerInput(pagerState) {
+                detectHorizontalDragGestures(
+                    onDragEnd = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage) } },
+                    onDragCancel = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage) } },
+                ) { change, dx ->
+                    change.consume()
+                    val pageSize = pagerState.layoutInfo.pageSize + pagerState.layoutInfo.pageSpacing
+                    pagerState.dispatchRawDelta(-dx / stride * pageSize)
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
         val page = pagerState.currentPage
