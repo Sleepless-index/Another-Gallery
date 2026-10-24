@@ -482,6 +482,7 @@ fun SelectionBar(
     val context = LocalContext.current
     val has = selected.isNotEmpty()
     var picker by remember { mutableStateOf(0) }
+    var confirmForever by remember { mutableStateOf(false) }
 
     PillBar(modifier) {
         if (!trash) {
@@ -521,10 +522,26 @@ fun SelectionBar(
             )
             PillItem(
                 icon = GIcons.Trash, label = "Delete forever", selected = false,
-                onClick = { if (has) vm.requestDeleteForever(source.filter { it.id in selected }) },
+                onClick = { if (has) confirmForever = true },
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+    if (confirmForever) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmForever = false },
+            title = { Text("Delete forever?") },
+            text = { Text("${selected.size} selected items will be permanently deleted. This can't be undone.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    confirmForever = false
+                    vm.requestDeleteForever(source.filter { it.id in selected })
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmForever = false }) { Text("Cancel") }
+            },
+        )
     }
     if (picker != 0) {
         AlbumPickerSheet(

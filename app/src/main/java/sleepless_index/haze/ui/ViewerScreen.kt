@@ -143,7 +143,7 @@ fun ViewerScreen(
 
     val topBarH = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 64.dp
     val bottomBarH = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 14.dp + 56.dp + 10.dp +
-        (if (list.size > 1) 60.dp else 0.dp)
+        (if (list.size > 1) 84.dp else 0.dp)
     val insetTop by animateDpAsState(if (chrome) topBarH else 0.dp, tween(220), label = "insetTop")
     val insetBottom by animateDpAsState(if (chrome) bottomBarH else 0.dp, tween(220), label = "insetBottom")
 
@@ -642,16 +642,19 @@ private fun AmbientBackdrop(item: MediaItem) {
 }
 
 
-/** Thumbnail strip under the photo. It scrolls in step with the pager; a fixed underline marks the current one. */
+/** Thumbnail strip under the photo: the current one is enlarged in the middle and the strip slides with the pager. */
 @Composable
 private fun FilmStrip(list: List<MediaItem>, pagerState: androidx.compose.foundation.pager.PagerState) {
     val ctx = LocalContext.current
     val density = androidx.compose.ui.platform.LocalDensity.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    val itemW = 36.dp
+    val itemW = 30.dp
+    val itemH = 46.dp
     val gap = 4.dp
+    val grow = 0.5f // the current thumbnail ends up 1.5x the others
     val stride = with(density) { (itemW + gap).toPx() }
+    val extra = with(density) { itemW.toPx() } * grow // extra width the current thumbnail takes
     val sidePad = (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp - 40.dp) / 2 - itemW / 2
 
     // Follow the pager continuously, so dragging a photo slides the strip with it.
@@ -662,60 +665,53 @@ private fun FilmStrip(list: List<MediaItem>, pagerState: androidx.compose.founda
             }
     }
 
-    Box(
-        Modifier
-            .padding(start = 20.dp, end = 20.dp, bottom = 8.dp)
+    androidx.compose.foundation.lazy.LazyRow(
+        state = listState,
+        userScrollEnabled = false,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = sidePad.coerceAtLeast(0.dp)),
+        horizontalArrangement = Arrangement.spacedBy(gap),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(bottom = 8.dp)
             .fillMaxWidth()
-            .height(52.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .background(Color(0xCC141414)),
+            .height(76.dp),
     ) {
-        androidx.compose.foundation.lazy.LazyRow(
-            state = listState,
-            userScrollEnabled = false,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = sidePad.coerceAtLeast(0.dp)),
-            horizontalArrangement = Arrangement.spacedBy(gap),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxSize().padding(bottom = 6.dp),
-        ) {
-            itemsIndexed(list) { i, it ->
-                val req = remember(it.uri) {
-                    coil.request.ImageRequest.Builder(ctx)
-                        .data(it.uri)
-                        .size(96)
-                        .apply { if (it.isVideo) setParameter("thumb", true) }
-                        .build()
-                }
-                coil.compose.AsyncImage(
-                    model = req,
-                    contentDescription = null,
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    modifier = Modifier
-                        .width(itemW)
-                        .height(36.dp)
-                        .graphicsLayer {
-                            val pos = pagerState.currentPage + pagerState.currentPageOffsetFraction
-                            val near = 1f - kotlin.math.min(1f, kotlin.math.abs(i - pos))
-                            alpha = 0.55f + 0.45f * near
-                            val sc = 0.94f + 0.06f * near
-                            scaleX = sc
-                            scaleY = sc
-                        }
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF2A2A2A))
-                        .clickable { scope.launch { pagerState.animateScrollToPage(i) } },
-                )
+        itemsIndexed(list) { i, it ->
+            val req = remember(it.uri) {
+                coil.request.ImageRequest.Builder(ctx)
+                    .data(it.uri)
+                    .size(160)
+                    .apply { if (it.isVideo) setParameter("thumb", true) }
+                    .build()
             }
+            coil.compose.AsyncImage(
+                model = req,
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier
+                    .width(itemW)
+                    .height(itemH)
+                    .graphicsLayer {
+                        val pos = pagerState.currentPage + pagerState.currentPageOffsetFraction
+                        val a = kotlin.math.floor(pos).toInt()
+                        val f = pos - a
+                        // How much each of the two neighbours around the current position is enlarged.
+                        val ga = extra * (1f - f)
+                        val gb = extra * f
+                        val own = when (i) { a -> ga; a + 1 -> gb; else -> 0f }
+                        val before = when { i <= a -> 0f; i == a + 1 -> ga; else -> ga + gb }
+                        val sPos = (a * stride + ga / 2f) + f * (((a + 1) * stride + ga + gb / 2f) - (a * stride + ga / 2f))
+                        translationX = before + own / 2f - (sPos - pos * stride)
+                        val near = own / extra
+                        val sc = 1f + grow * near
+                        scaleX = sc
+                        scaleY = sc
+                        alpha = 0.6f + 0.4f * near
+                    }
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF2A2A2A))
+                    .clickable { scope.launch { pagerState.animateScrollToPage(i) } },
+            )
         }
-        // Underline for the current photo (the strip scrolls underneath it)
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 5.dp)
-                .width(itemW)
-                .height(3.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(MaterialTheme.colorScheme.primary),
-        )
     }
 }

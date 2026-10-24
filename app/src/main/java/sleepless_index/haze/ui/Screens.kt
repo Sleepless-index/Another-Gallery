@@ -46,6 +46,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -210,6 +212,7 @@ fun CollectionScreen(
     val favs by vm.favorites.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
     val selectMode by vm.selectMode.collectAsStateWithLifecycle()
+    var confirmDeleteAll by remember { mutableStateOf(false) }
     val entries = remember(items, flat, trash, vault) {
         // "flat" = one continuous grid with no date headers (Recent album and Trash)
         if (flat || trash || vault) items.map { Entry.Media(it) } else buildEntries(items)
@@ -257,21 +260,61 @@ fun CollectionScreen(
                     }
                 },
                 onSetSelected = { id, on -> vm.setSelected(id, on) },
-                bottomPad = BottomBarSpace + navBottomInset(),
+                bottomPad = BottomBarSpace + navBottomInset() + (if (trash) 80.dp else 0.dp),
                 modifier = Modifier.weight(1f),
                 emptyText = if (trash) "Trash is empty" else if (vault) "Your Vault is empty" else "Nothing here yet",
             )
         }
         if (trash && !selectMode && items.isNotEmpty()) {
-            GIconButton(
-                GIcons.Trash, "Empty trash",
-                onClick = { vm.emptyTrash() },
-                size = 56.dp,
-                container = androidx.compose.material3.MaterialTheme.colorScheme.error,
-                tint = androidx.compose.material3.MaterialTheme.colorScheme.onError,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = navBottomInset() + 18.dp),
+            val scheme = androidx.compose.material3.MaterialTheme.colorScheme
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                androidx.compose.material3.Text(
+                    text = "Photos and videos display the days left until they are permanently deleted.",
+                    color = scheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp),
+                )
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(scheme.surface)
+                        .drawBehind { drawLine(scheme.outline, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx()) }
+                        .bounceClick(onClick = { confirmDeleteAll = true })
+                        .padding(top = 12.dp, bottom = 12.dp)
+                        .padding(bottom = navBottomInset()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    androidx.compose.material3.Icon(
+                        GIcons.Trash, contentDescription = null,
+                        tint = scheme.onBackground, modifier = Modifier.size(24.dp),
+                    )
+                    androidx.compose.material3.Text(
+                        "Delete all", color = scheme.onBackground,
+                        fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+        }
+        if (confirmDeleteAll) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { confirmDeleteAll = false },
+                title = { androidx.compose.material3.Text("Delete all?") },
+                text = { androidx.compose.material3.Text("${items.size} items will be permanently deleted. This can't be undone.") },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = { confirmDeleteAll = false; vm.emptyTrash() }) {
+                        androidx.compose.material3.Text("Delete", color = androidx.compose.material3.MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { confirmDeleteAll = false }) {
+                        androidx.compose.material3.Text("Cancel")
+                    }
+                },
             )
         }
         SelectionBarHost(selectMode, vm, items, trash = trash, modifier = Modifier.align(Alignment.BottomCenter), vault = vault)

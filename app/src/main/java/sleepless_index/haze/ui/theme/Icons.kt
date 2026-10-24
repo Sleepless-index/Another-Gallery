@@ -237,9 +237,9 @@ object GIcons {
     }
     val Lens: ImageVector by lazy {
         IconBuilder("Lens")
-            .s("M 4 9 V 6 a 2 2 0 0 1 2 -2 h 3 M 15 4 h 3 a 2 2 0 0 1 2 2 v 3 M 20 15 v 3 a 2 2 0 0 1 -2 2 h -3 M 9 20 H 6 a 2 2 0 0 1 -2 -2 v -3")
-            .s(circle(11.5f, 11.5f, 3.3f))
-            .f(circle(17f, 17f, 1.4f))
+            .s("M 3.5 9 V 7 a 3.5 3.5 0 0 1 3.5 -3.5 h 2 M 15 3.5 h 2 a 3.5 3.5 0 0 1 3.5 3.5 v 2 M 20.5 15 v 2 a 3.5 3.5 0 0 1 -3.5 3.5 h -2 M 9 20.5 H 7 a 3.5 3.5 0 0 1 -3.5 -3.5 v -2")
+            .s(circle(11f, 11f, 3.6f))
+            .f(circle(17f, 17f, 2f))
             .build()
     }
     val Audio: ImageVector by lazy {
